@@ -54,5 +54,5 @@ You can pass the following options to `opts`:
 
 ## Requirements
 
-* **Neovim 0.10+** (Required for `vim.system`).
-* **Norminette**: The 42 `norminette` tool must be installed and accessible (via `pip` or `uv`).
+* **Neovim 0.10+**
+* **Norminette**: The `norminette` tool must be installed and accessible (via `pip` or `uv`).
