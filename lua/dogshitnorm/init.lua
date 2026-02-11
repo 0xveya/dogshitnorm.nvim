@@ -38,6 +38,10 @@ function M.lint()
 			table.insert(command, arg)
 		end
 	end
+	if filename:match("%.h$") then
+		table.insert(command, "-R")
+		table.insert(command, "CheckDefine")
+	end
 	table.insert(command, filename)
 
 	vim.system(command, { text = true }, function(obj)
