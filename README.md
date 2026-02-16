@@ -8,9 +8,11 @@ It also includes **custom built-in checks** for edge cases and subjective rules 
 
 * **Asynchronous Execution**: Runs `norminette` in the background without freezing your editor.
 * **Extended Manual Checks**: Includes strict Lua-based checks for rules `norminette` misses:
-**Type Naming Conventions**: Enforces `s_` for structs , `t_` for typedefs , `u_` for unions , and `e_` for enums.
-**42 Header Validation**: Ensures your `.c` and `.h` files have a valid header containing your `@student.campus` email, creation date, and update date.
-**Makefile Validation**: Checks `Makefile`s for the mandatory rules: `$(NAME)`, `all`, `clean`, `fclean`, and `re`.
+  * **Type Naming Conventions**: Enforces `s_` for structs, `t_` for typedefs, `u_` for unions, and `e_` for enums.
+  * **42 Header Validation**: Ensures your `.c` and `.h` files have a valid header containing your `@student.campus` email, creation date, and update date.
+  * **Makefile Validation**: Checks `Makefile`s for the mandatory rules (`$(NAME)`, `all`, `clean`, `fclean`, `re`). It ensures the `all` rule is the default (first) rule defined, and forbids the use of wildcards like `*.c` or `*.o`.
+  * **Header Strictness (.h)**: Enforces proper double-inclusion guards (e.g., `#ifndef FT_FOO_H`), strictly forbids including `.c` files, and prevents function bodies from being defined in headers.
+  * **Macro Restrictions**: Validates that `#define` macros are used solely for literal and constant values, throwing errors if code logic (like `if`, `while`, or semicolons) is detected.
 * **Native Diagnostics**: Errors appear as virtual text, signs in the gutter, and in the location list (integrates seamlessly with `vim.diagnostic`).
 * **Flexible Configuration**: Supports running via `uv`, `pip`, or global binaries.
 * **Automatic Linting**: Optionally runs automatically when you save a file.
@@ -21,7 +23,7 @@ To install with [lazy.nvim](https://github.com/folke/lazy.nvim):
 
 ```lua
 {
-  "Stefanistkuhl/dogshitnorm.nvim",
+  "0xveya/dogshitnorm.nvim",
   -- Note: Added "make" so the plugin loads for Makefiles too
   ft = { "c", "cpp", "make" },
 
@@ -67,4 +69,4 @@ You can pass the following options to `opts`:
 ## Requirements
 
 * **Neovim 0.10+**
-* **Norminette**: The `norminette` tool must be installed and accessible (via `pip` or `uv`).
+* **Norminette**: `norminette` must be installed and accessible (via `pip` or `uv`).

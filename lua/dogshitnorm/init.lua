@@ -88,6 +88,69 @@ local function check_type_naming(bufnr, diagnostics)
 	end
 end
 
+local function check_includes(bufnr, diagnostics)
+	local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+
+	for i, line in ipairs(lines) do
+		-- Look for #include "file.c" or #include <file.c>
+		local c_include = line:match('^%s*#%s*include%s+[<"](.*%.c)[>"]')
+		if c_include then
+			table.insert(diagnostics, {
+				bufnr = bufnr,
+				lnum = i - 1,
+				col = line:find("#") - 1,
+				severity = vim.diagnostic.severity.ERROR,
+				source = "norm-manual",
+				code = "INCLUDE_C_FILE",
+				message = "You cannot include a .c file in another file.",
+			})
+		end
+	end
+end
+
+local function check_asterisk_rules(bufnr, filename, diagnostics)
+	local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+	local is_header = filename:match("%.h$")
+
+	for i, line in ipairs(lines) do
+		-- A. Check for function bodies in .h files
+		if is_header and line:match("^{") then
+			table.insert(diagnostics, {
+				bufnr = bufnr,
+				lnum = i - 1,
+				col = 0,
+				severity = vim.diagnostic.severity.ERROR,
+				source = "norm-manual",
+				code = "HEADER_FUNC_BODY",
+				message = "(*) Header files cannot contain function bodies.",
+			})
+		end
+
+		-- B. Check for logic/code inside macros (must be literals only)
+		local define_content = line:match("^%s*#%s*define%s+[%w_]+%s+(.*)")
+		if define_content then
+			-- If the macro contains a semicolon or control keywords, it's likely code, not a literal
+			if
+				define_content:match(";")
+				or define_content:match("%b{}")
+				or define_content:match("%Wif%W")
+				or define_content:match("%Wwhile%W")
+				or define_content:match("%Wreturn%W")
+			then
+				table.insert(diagnostics, {
+					bufnr = bufnr,
+					lnum = i - 1,
+					col = line:find("#") - 1,
+					severity = vim.diagnostic.severity.ERROR,
+					source = "norm-manual",
+					code = "MACRO_LOGIC",
+					message = "(*) Macros must only be used for literal and constant values, not logic/code.",
+				})
+			end
+		end
+	end
+end
+
 -- 2. Custom manual checker for the 42 Header
 local function check_42_header(bufnr, diagnostics)
 	local lines = vim.api.nvim_buf_get_lines(bufnr, 0, 11, false)
@@ -144,6 +207,75 @@ local function check_makefile(bufnr, diagnostics)
 			})
 		end
 	end
+
+	local first_rule_found = false
+
+	for i, line in ipairs(lines) do
+		-- Check if 'all' is the default (first) rule
+		local target = line:match("^([A-Za-z0-9_$.()%-]+):")
+		if target then
+			if not first_rule_found then
+				first_rule_found = true
+				if target ~= "all" then
+					table.insert(diagnostics, {
+						bufnr = bufnr,
+						lnum = i - 1,
+						col = 0,
+						severity = vim.diagnostic.severity.ERROR,
+						source = "norm-manual",
+						code = "MAKEFILE_DEFAULT_RULE",
+						message = "The 'all' rule must be the default (the first rule defined).",
+					})
+				end
+			end
+		end
+
+		-- check for wildcards in makefiles
+		if line:match("%*%.c") or line:match("%*%.o") then
+			table.insert(diagnostics, {
+				bufnr = bufnr,
+				lnum = i - 1,
+				col = line:find("%*%.") - 1,
+				severity = vim.diagnostic.severity.ERROR,
+				source = "norm-manual",
+				code = "MAKEFILE_WILDCARD",
+				message = "Wildcards (*.c, *.o) are forbidden. Explicitly name your source files.",
+			})
+		end
+	end
+end
+
+-- 4. Custom manual checker for header include guards
+local function check_header_guards(bufnr, filename, diagnostics)
+	-- Only run for .h files
+	if not filename:match("%.h$") then
+		return
+	end
+
+	-- Extract the base filename from the full path (e.g., "src/ft_foo.h" -> "ft_foo.h")
+	local basename = filename:match("^.+/(.+)$") or filename
+
+	-- Create the expected macro name: ft_foo.h -> FT_FOO_H
+	local expected_macro = basename:upper():gsub("%.", "_")
+
+	local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+	local content = table.concat(lines, "\n")
+
+	-- Pattern matching allows optional spaces after '#'
+	local ifndef_pattern = "#%s*ifndef%s+" .. expected_macro
+	local define_pattern = "#%s*define%s+" .. expected_macro
+
+	if not content:match(ifndef_pattern) or not content:match(define_pattern) then
+		table.insert(diagnostics, {
+			bufnr = bufnr,
+			lnum = 0, -- Placed at the top of the file
+			col = 0,
+			severity = vim.diagnostic.severity.ERROR,
+			source = "norm-manual",
+			code = "HEADER_GUARD",
+			message = "Header missing or incorrect double inclusion protection. Expected macro: " .. expected_macro,
+		})
+	end
 end
 
 function M.lint()
@@ -170,6 +302,9 @@ function M.lint()
 	if is_c_or_h then
 		check_type_naming(bufnr, manual_diagnostics)
 		check_42_header(bufnr, manual_diagnostics)
+		check_includes(bufnr, manual_diagnostics)
+		check_asterisk_rules(bufnr, filename, manual_diagnostics)
+		check_header_guards(bufnr, filename, manual_diagnostics)
 	elseif is_makefile then
 		check_makefile(bufnr, manual_diagnostics)
 	end
