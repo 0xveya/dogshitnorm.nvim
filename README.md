@@ -2,12 +2,18 @@
 
 A lightweight, asynchronous Neovim plugin that runs `norminette` and displays errors directly in your editor as native diagnostics.
 
+It also includes **custom built-in checks** for edge cases and subjective rules that the official `norminette` tool ignores, ensuring your C projects are fully compliant with the 42 Norm.
+
 ## Features
 
-- **Asynchronous Execution**: Runs `norminette` in the background without freezing your editor.
-- **Native Diagnostics**: Errors appear as virtual text, signs in the gutter, and in the location list (integrates with `vim.diagnostic`).
-- **Flexible Configuration**: Supports running via `uv`, `pip`, or global binaries.
-- **Automatic Linting**: Optionally runs automatically when you save a file.
+* **Asynchronous Execution**: Runs `norminette` in the background without freezing your editor.
+* **Extended Manual Checks**: Includes strict Lua-based checks for rules `norminette` misses:
+**Type Naming Conventions**: Enforces `s_` for structs , `t_` for typedefs , `u_` for unions , and `e_` for enums.
+**42 Header Validation**: Ensures your `.c` and `.h` files have a valid header containing your `@student.campus` email, creation date, and update date.
+**Makefile Validation**: Checks `Makefile`s for the mandatory rules: `$(NAME)`, `all`, `clean`, `fclean`, and `re`.
+* **Native Diagnostics**: Errors appear as virtual text, signs in the gutter, and in the location list (integrates seamlessly with `vim.diagnostic`).
+* **Flexible Configuration**: Supports running via `uv`, `pip`, or global binaries.
+* **Automatic Linting**: Optionally runs automatically when you save a file.
 
 ## Installation
 
@@ -16,7 +22,8 @@ To install with [lazy.nvim](https://github.com/folke/lazy.nvim):
 ```lua
 {
   "Stefanistkuhl/dogshitnorm.nvim",
-  ft = { "c", "cpp" },
+  -- Note: Added "make" so the plugin loads for Makefiles too
+  ft = { "c", "cpp", "make" },
 
   -- Configuration
   opts = {
@@ -27,19 +34,23 @@ To install with [lazy.nvim](https://github.com/folke/lazy.nvim):
     -- cmd = { "norminette" },
 
     args = { "--no-colors" },      -- Essential to strip ANSI codes for clean parsing
+    pattern = { "*.c", "*.h", "[Mm]akefile" }, -- Files to trigger autocmds on
     keybinding = "<leader>cn",     -- Hotkey to trigger linting manually
     lint_on_save = true,           -- Auto-lint when saving the file
   },
 }
+
 ```
 
 ## Usage
 
-Once installed, the plugin works out of the box.
+Once installed, the plugin works out of the box for `.c`, `.h`, and `Makefile`s.
 
 * **Automatic**: If `lint_on_save` is enabled (default), simply save your file (`:w`). Errors will appear in the gutter and as red virtual text next to the offending lines.
 * **Manual**: Press `<leader>cn` (or your configured keybinding) to trigger the linter manually.
 * **Command**: Run `:Norminette` to trigger it via command mode.
+
+*Note: When running on a `Makefile`, the plugin intelligently skips the standard `norminette` executable (which would throw an error) and only runs the custom Lua diagnostic checks.*
 
 ## Configuration
 
@@ -49,6 +60,7 @@ You can pass the following options to `opts`:
 | --- | --- | --- | --- |
 | `cmd` | `table` or `string` | `{"norminette"}` | The command to execute. Use a table for arguments (e.g. `{"uv", "tool", "run", ...}`). |
 | `args` | `table` | `{"--no-colors"}` | Extra arguments passed to the command. |
+| `pattern` | `table` | `{"*.c", "*.h", "[Mm]akefile"}` | The file patterns that trigger the linter on save or text change. |
 | `lint_on_save` | `boolean` | `true` | Whether to run the linter automatically on `BufWritePost`. |
 | `keybinding` | `string` | `"<leader>cn"` | The keymap to trigger the linter manually. Set to `nil` to disable. |
 
