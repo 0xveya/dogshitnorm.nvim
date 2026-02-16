@@ -131,15 +131,29 @@ local function check_asterisk_rules(bufnr, filename, diagnostics)
 	for i, line in ipairs(lines) do
 		-- A. Check for function bodies in .h files
 		if is_header and line:match("^{") then
-			table.insert(diagnostics, {
-				bufnr = bufnr,
-				lnum = i - 1,
-				col = 0,
-				severity = vim.diagnostic.severity.ERROR,
-				source = "norm-manual",
-				code = "HEADER_FUNC_BODY",
-				message = "(*) Header files cannot contain function bodies.",
-			})
+			-- Look at the previous line safely
+			local prev_line = ""
+			if i > 1 then
+				prev_line = lines[i - 1]
+			end
+
+			-- If the previous line is a data structure declaration, it's allowed
+			local is_data_structure = prev_line:match("struct")
+				or prev_line:match("enum")
+				or prev_line:match("union")
+				or prev_line:match("typedef")
+
+			if not is_data_structure then
+				table.insert(diagnostics, {
+					bufnr = bufnr,
+					lnum = i - 1,
+					col = 0,
+					severity = vim.diagnostic.severity.ERROR,
+					source = "norm-manual",
+					code = "HEADER_FUNC_BODY",
+					message = "(*) Header files cannot contain function bodies.",
+				})
+			end
 		end
 
 		-- B. Check for logic/code inside macros (must be literals only)
