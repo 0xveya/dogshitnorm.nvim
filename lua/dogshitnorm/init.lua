@@ -4,6 +4,7 @@ local default_config = {
 	cmd = { "norminette" },
 	args = { "--no-colors" },
 	active = true,
+	active_dirs = nil,
 	pattern = { "*.c", "*.h", "[Mm]akefile" },
 	lint_on_save = true,
 	keybinding = "<leader>cn",
@@ -14,6 +15,21 @@ local ns_id = vim.api.nvim_create_namespace("norminette")
 
 local function strip_ansi(str)
 	return str:gsub("\27%[[0-9;]*m", "")
+end
+
+local function is_in_active_dir(filepath)
+	if type(M.config.active_dirs) ~= "table" or #M.config.active_dirs == 0 then
+		return true
+	end
+
+	for _, dir in ipairs(M.config.active_dirs) do
+		local expanded_dir = vim.fn.expand(dir)
+		if vim.startswith(filepath, expanded_dir) then
+			return true
+		end
+	end
+
+	return false
 end
 
 -- 1. Custom manual checker for type naming conventions
@@ -280,6 +296,10 @@ end
 
 function M.lint()
 	if not M.config.active then
+		return
+	end
+
+	if not is_in_active_dir(filename) then
 		return
 	end
 

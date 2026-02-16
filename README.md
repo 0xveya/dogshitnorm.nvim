@@ -7,6 +7,7 @@ It also includes **custom built-in checks** for edge cases and subjective rules 
 ## Features
 
 * **Asynchronous Execution**: Runs `norminette` in the background without freezing your editor.
+* **Directory Whitelisting**: Only activate the plugin inside specific project folders to avoid screaming at your non-42 side projects.
 * **Extended Manual Checks**: Includes strict Lua-based checks for rules `norminette` misses:
   * **Type Naming Conventions**: Enforces `s_` for structs, `t_` for typedefs, `u_` for unions, and `e_` for enums.
   * **42 Header Validation**: Ensures your `.c` and `.h` files have a valid header containing your `@student.campus` email, creation date, and update date.
@@ -39,6 +40,13 @@ To install with [lazy.nvim](https://github.com/folke/lazy.nvim):
     pattern = { "*.c", "*.h", "[Mm]akefile" }, -- Files to trigger autocmds on
     keybinding = "<leader>cn",     -- Hotkey to trigger linting manually
     lint_on_save = true,           -- Auto-lint when saving the file
+    
+    -- Optional: Only run the linter inside these directories
+    -- Leave nil or empty to run everywhere
+    active_dirs = { 
+      "~/42", 
+      "~/Projects/42" 
+    },
   },
 }
 
@@ -65,6 +73,7 @@ You can pass the following options to `opts`:
 | `pattern` | `table` | `{"*.c", "*.h", "[Mm]akefile"}` | The file patterns that trigger the linter on save or text change. |
 | `lint_on_save` | `boolean` | `true` | Whether to run the linter automatically on `BufWritePost`. |
 | `keybinding` | `string` | `"<leader>cn"` | The keymap to trigger the linter manually. Set to `nil` to disable. |
+| `active_dirs` | `table` or `nil` | `nil` | A list of allowed directories. If set, the linter only runs on files inside these paths. |
 
 ## Requirements
 
