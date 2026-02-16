@@ -299,6 +299,9 @@ function M.lint()
 		return
 	end
 
+	local bufnr = vim.api.nvim_get_current_buf()
+	local filename = vim.api.nvim_buf_get_name(bufnr)
+
 	if not is_in_active_dir(filename) then
 		return
 	end
