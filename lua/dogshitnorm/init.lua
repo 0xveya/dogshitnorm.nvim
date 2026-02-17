@@ -9,8 +9,41 @@ local default_config = {
 	lint_on_save = true,
 	keybinding = "<leader>cn",
 
+	auto_makefile = true,
 	auto_header_guard = true,
 	guard_keybinding = "<leader>ch",
+	makefile_keybinding = "<leader>cm",
+	makefile_stub = [[
+NAME		= your_proejct_name
+
+CC		= cc
+CFLAGS		= -Wall -Wextra -Werror
+RM		= rm -f
+
+SRC_DIR		= src
+SRCS		= $(SRC_DIR)/main.c
+
+OBJS		= $(SRCS:.c=.o)
+
+all: $(NAME)
+
+%.o: %.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(NAME): $(OBJS)
+	$(CC) $(CFLAGS) $(OBJS) -o $(NAME)
+
+clean:
+	$(RM) $(OBJS)
+
+fclean: clean
+	$(RM) $(NAME)
+
+re: fclean all
+
+.PHONY: all clean fclean re
+.DEFAULT_GOAL := all
+]],
 }
 
 M.config = {}
@@ -416,24 +449,23 @@ local function add_header_guard(bufnr)
 	end
 
 	local filename = vim.api.nvim_buf_get_name(bufnr)
-
-	-- Only run for .h files
 	if not filename:match("%.h$") then
 		return
 	end
 
 	local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
 	local content = table.concat(lines, "\n")
-
-	-- Skip if it already has inclusion guards
 	if content:match("#%s*ifndef") then
 		return
 	end
-
-	-- Allow up to 15 lines so the 11-line stdheader + blank lines fit safely
 	if #lines > 15 then
 		return
 	end
+
+	while #lines > 0 and lines[#lines]:match("^%s*$") do
+		table.remove(lines)
+	end
+	vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
 	local basename = filename:match("^.+/(.+)$") or filename
 	local expected_macro = basename:upper():gsub("%.", "_")
@@ -447,20 +479,46 @@ local function add_header_guard(bufnr)
 		"#endif",
 	}
 
-	-- Append to the end of the buffer
 	local current_line_count = vim.api.nvim_buf_line_count(bufnr)
 	vim.api.nvim_buf_set_lines(bufnr, -1, -1, false, new_lines)
 
-	-- Drop cursor on the empty line between define and endif
-	local new_cursor_line = current_line_count + 5
-
+	local new_cursor_line = current_line_count + 4
 	if vim.api.nvim_get_current_buf() == bufnr then
-		local total_lines = vim.api.nvim_buf_line_count(bufnr)
-		if new_cursor_line <= total_lines then
-			vim.api.nvim_win_set_cursor(0, { new_cursor_line, 0 })
-			vim.cmd("startinsert")
-		end
+		vim.api.nvim_win_set_cursor(0, { new_cursor_line, 0 })
 	end
+end
+
+local function generate_makefile(bufnr)
+	bufnr = bufnr or vim.api.nvim_get_current_buf()
+	local filepath = vim.api.nvim_buf_get_name(bufnr)
+
+	if not is_in_active_dir(filepath) then
+		return
+	end
+	if vim.api.nvim_buf_line_count(bufnr) > 1 then
+		return
+	end
+
+	if vim.fn.exists(":Stdheader") > 0 then
+		vim.cmd("Stdheader")
+	end
+
+	local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+	while #lines > 0 and lines[#lines]:match("^%s*$") do
+		table.remove(lines)
+	end
+	vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+	local stub_lines = vim.split(M.config.makefile_stub, "\n")
+	if #lines > 0 then
+		table.insert(stub_lines, 1, "")
+	end
+	vim.api.nvim_buf_set_lines(bufnr, -1, -1, false, stub_lines)
+
+	vim.schedule(function()
+		vim.fn.search("NAME")
+		vim.cmd("normal! ^")
+	end)
 end
 
 function M.setup(opts)
@@ -477,6 +535,26 @@ function M.setup(opts)
 				end)
 			end,
 		})
+	end
+
+	if M.config.auto_makefile then
+		vim.api.nvim_create_autocmd("BufNewFile", {
+			pattern = { "Makefile", "makefile" },
+			group = vim.api.nvim_create_augroup("NorminetteMakeGen", { clear = true }),
+			callback = function(args)
+				vim.schedule(function()
+					generate_makefile(args.buf)
+				end)
+			end,
+		})
+	end
+
+	vim.api.nvim_create_user_command("Makegen", function()
+		generate_makefile()
+	end, {})
+
+	if M.config.makefile_keybinding then
+		vim.keymap.set("n", M.config.makefile_keybinding, ":Makegen<CR>", { silent = true })
 	end
 
 	if M.config.guard_keybinding then

@@ -7,70 +7,77 @@ It also includes **custom built-in checks** for edge cases and subjective rules 
 ## Features
 
 * **Asynchronous Execution**: Runs `norminette` in the background without freezing your editor.
-* **Smart Header Guard Generator**: Automatically inserts C-style `#ifndef` guards in new `.h` files. It intelligently waits for your 42 Header plugin to finish before appending the guard.
-* **Extended Manual Checks**: Includes strict Lua-based checks for rules `norminette` misses:
-* **Type Naming Conventions**: Enforces `s_` for structs, `t_` for typedefs, `u_` for unions, and `e_` for enums.
-* **42 Header Validation**: Ensures your `.c` and `.h` files have a valid header containing your `@student.campus` email, creation date, and update date.
-* **Makefile Validation**: Checks `Makefile`s for mandatory rules (`$(NAME)`, `all`, `clean`, `fclean`, `re`). It ensures the `all` rule is the default, and forbids wildcards like `*.c`.
-* **Header Strictness (.h)**: Enforces proper double-inclusion guards (e.g., `#ifndef FT_FOO_H`), strictly forbids including `.c` files, and prevents function bodies in headers.
-* **Macro Restrictions**: Validates that `#define` macros are used solely for literal and constant values.
+* **Smart Header Guard Generator**: Automatically inserts C-style `#ifndef` guards in new `.h` files. It intelligently waits for the 42 Header to be inserted first, ensures a single blank line of separation, and keeps you in Normal mode.
+* **Makefile Boilerplate**: Instantly populates new `Makefile`s with 42-compliant mandatory rules (`all`, `clean`, `fclean`, `re`) and a standard project structure.
+* **Extended Manual Checks**: Strict Lua-based checks for rules `norminette` misses:
+* **Type Naming**: Enforces `s_`, `t_`, `u_`, and `e_` prefixes.
+* **42 Header Validation**: Ensures a valid header with student email and dates.
+* **Makefile Strictness**: Validates mandatory rules, ensures `all` is the default target, and forbids wildcards (`*.c`).
+* **Header Restrictions**: Forbids `.c` includes and function bodies in headers.
 
 
-* **Native Diagnostics**: Errors appear as virtual text, signs in the gutter, and in the location list (integrates seamlessly with `vim.diagnostic`).
-* **Directory Whitelisting**: Only activate the plugin inside specific project folders to avoid screaming at your non-42 side projects.
+* **Native Diagnostics**: Integrates with `vim.diagnostic` for virtual text, gutter signs, and location lists.
+* **Directory Whitelisting**: Only activates inside your specified 42 project folders.
 
 ## Installation
 
-To install with [lazy.nvim]():
+Using [lazy.nvim]():
 
 ```lua
 {
-  "0xveya/dogshitnorm.nvim",
-  ft = { "c", "cpp", "make" },
-
-  opts = {
-    -- Recommended: use 'uv' tool for a clean environment
-    cmd = { "uv", "tool", "run", "norminette" },
-    
-    args = { "--no-colors" },      -- Essential to strip ANSI codes
-    keybinding = "<leader>cn",     -- Hotkey to trigger linting manually
-    lint_on_save = true,           -- Auto-lint when saving the file
-
-    -- Header Guard settings
-    auto_header_guard = true,      -- Auto-insert #ifndef guards in .h files
-    guard_keybinding = "<leader>ch", -- Manual hotkey to insert guards
-    
-    -- Optional: Only run the linter inside these directories
-    active_dirs = { 
-      "~/42", 
-      "~/Projects/42" 
+    "0xveya/dogshitnorm.nvim",
+    ft = { "c", "cpp", "make" },
+    dependencies = {
+        "42Paris/42header", -- Required for auto-header integration
     },
-  },
+    opts = {
+        -- Recommended: use 'uv' tool for a clean environment
+        cmd = { "uv", "tool", "run", "norminette" },
+        args = { "--no-colors" },
+
+        -- General Settings
+        keybinding = "<leader>cn",     -- Manual lint
+        lint_on_save = true,
+
+        -- Header Guard settings
+        auto_header_guard = true,
+        guard_keybinding = "<leader>ch",
+
+        -- Makefile settings
+        auto_makefile = true,          -- Auto-generate stub on new Makefile
+        makefile_keybinding = "<leader>cm",
+
+        -- Optional: Only run inside these directories
+        active_dirs = { 
+            "~/42", 
+            "~/Projects/42" 
+        },
+    },
 }
 
 ```
 
 ## Usage
 
-Once installed, the plugin works out of the box for `.c`, `.h`, and `Makefile`s.
-
-* **Linting**: Save your file (`:w`) or press `<leader>cn`. Errors appear via `vim.diagnostic`.
-* **Automatic Header Guards**: When you open a new or empty `.h` file, the plugin waits for your standard 42 Header to be inserted, then automatically appends the `#ifndef` block and puts you in **Insert Mode** exactly where you need to start typing.
-* **Manual Header Guards**: If you have an existing header file without guards, press `<leader>ch` to generate them instantly based on the filename.
+* **Linting**: Save your file (`:w`) or press `<leader>cn`.
+* **Auto-Guards**: Creating a new `.h` file inside an active directory will automatically trigger the 42 Header and append inclusion guards.
+* **Auto-Makefile**: Creating a new `Makefile` will trigger the 42 Header and append a project stub. The cursor will automatically jump to the `NAME` variable for quick editing.
+* **Manual Trigger**: Use `:Makegen` for Makefiles or `:Norminette` for linting at any time.
 
 ## Configuration
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
-| `cmd` | `table`/`string` | `{"norminette"}` | The command to execute. |
-| `args` | `table` | `{"--no-colors"}` | Extra arguments for norminette. |
-| `lint_on_save` | `boolean` | `true` | Run linter automatically on save. |
-| `keybinding` | `string` | `"<leader>cn"` | Keymap to trigger linting manually. |
-| `auto_header_guard` | `boolean` | `true` | Auto-insert inclusion guards in headers. |
-| `guard_keybinding` | `string` | `"<leader>ch"` | Keymap to manually insert guards. |
-| `active_dirs` | `table` | `nil` | Only run inside these directory paths. |
+| `cmd` | `table` | `{"norminette"}` | The command to execute. |
+| `auto_header_guard` | `boolean` | `true` | Auto-insert guards in `.h` files. |
+| `auto_makefile` | `boolean` | `true` | Auto-populate new Makefiles. |
+| `keybinding` | `string` | `"<leader>cn"` | Keymap to trigger linting. |
+| `guard_keybinding` | `string` | `"<leader>ch"` | Keymap to trigger header guard. |
+| `makefile_keybinding` | `string` | `"<leader>cm"` | Keymap to trigger Makefile stub. |
+| `active_dirs` | `table` | `nil` | List of allowed project paths. |
 
 ## Requirements
 
 * **Neovim 0.10+**
-* **Norminette**: Installed via `pip` or `uv`.
+* **Norminette**: Installed and accessible in your path.
+* **42 Header**: The `42header` plugin .
