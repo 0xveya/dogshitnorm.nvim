@@ -7,8 +7,9 @@ It also includes **custom built-in checks** for edge cases and subjective rules 
 ## Features
 
 * **Asynchronous Execution**: Runs `norminette` in the background without freezing your editor.
-* **Smart Header Guard Generator**: Automatically inserts C-style `#ifndef` guards in new `.h` files. It intelligently waits for the 42 Header to be inserted first, ensures a single blank line of separation, and keeps you in Normal mode.
+* **Smart Header Guard Generator**: Automatically inserts C-style `#ifndef` guards in new `.h` files. It intelligently waits for the 42 Header to be inserted first, ensures clean spacing, and keeps you in Normal mode.
 * **Makefile Boilerplate**: Instantly populates new `Makefile`s with 42-compliant mandatory rules (`all`, `clean`, `fclean`, `re`) and a standard project structure.
+* **Smart Source Sync**: Automatically detects your `SRC_DIR` from the Makefile and syncs your `SRCS` list with all `.c` files found in that directory (recursive). No more manual typing of every new file.
 * **Extended Manual Checks**: Strict Lua-based checks for rules `norminette` misses:
 * **Type Naming**: Enforces `s_`, `t_`, `u_`, and `e_` prefixes.
 * **42 Header Validation**: Ensures a valid header with student email and dates.
@@ -16,7 +17,7 @@ It also includes **custom built-in checks** for edge cases and subjective rules 
 * **Header Restrictions**: Forbids `.c` includes and function bodies in headers.
 
 
-* **Native Diagnostics**: Integrates with `vim.diagnostic` for virtual text, gutter signs, and location lists.
+* **Native Diagnostics**: Integrates with `vim.diagnostic` for virtual text and gutter signs.
 * **Directory Whitelisting**: Only activates inside your specified 42 project folders.
 
 ## Installation
@@ -36,7 +37,7 @@ Using [lazy.nvim]():
         args = { "--no-colors" },
 
         -- General Settings
-        keybinding = "<leader>cn",     -- Manual lint
+        keybinding = "<leader>cn",
         lint_on_save = true,
 
         -- Header Guard settings
@@ -44,13 +45,16 @@ Using [lazy.nvim]():
         guard_keybinding = "<leader>ch",
 
         -- Makefile settings
-        auto_makefile = true,          -- Auto-generate stub on new Makefile
+        auto_makefile = true,
         makefile_keybinding = "<leader>cm",
+        
+        -- Makefile Sync settings
+        auto_sync_makefile = true,
+        makesync_keybinding = "<leader>cu",
 
         -- Optional: Only run inside these directories
         active_dirs = { 
-            "~/42", 
-            "~/Projects/42" 
+            "~/coding/42", 
         },
     },
 }
@@ -61,8 +65,8 @@ Using [lazy.nvim]():
 
 * **Linting**: Save your file (`:w`) or press `<leader>cn`.
 * **Auto-Guards**: Creating a new `.h` file inside an active directory will automatically trigger the 42 Header and append inclusion guards.
-* **Auto-Makefile**: Creating a new `Makefile` will trigger the 42 Header and append a project stub. The cursor will automatically jump to the `NAME` variable for quick editing.
-* **Manual Trigger**: Use `:Makegen` for Makefiles or `:Norminette` for linting at any time.
+* **Auto-Makefile**: Creating a new `Makefile` will trigger the 42 Header and append a project stub.
+* **Source Sync**: Press `<leader>cu` (or run `:Makesync`) inside a Makefile. The plugin will read your `SRC_DIR` variable, crawl that folder for `.c` files, and update your `SRCS` block with proper 42-style formatting and backslashes.
 
 ## Configuration
 
@@ -71,13 +75,15 @@ Using [lazy.nvim]():
 | `cmd` | `table` | `{"norminette"}` | The command to execute. |
 | `auto_header_guard` | `boolean` | `true` | Auto-insert guards in `.h` files. |
 | `auto_makefile` | `boolean` | `true` | Auto-populate new Makefiles. |
+| `auto_sync_makefile` | `boolean` | `true` | Enable the `:Makesync` command. |
 | `keybinding` | `string` | `"<leader>cn"` | Keymap to trigger linting. |
 | `guard_keybinding` | `string` | `"<leader>ch"` | Keymap to trigger header guard. |
 | `makefile_keybinding` | `string` | `"<leader>cm"` | Keymap to trigger Makefile stub. |
+| `makesync_keybinding` | `string` | `"<leader>cu"` | Keymap to sync SRCS with SRC_DIR. |
 | `active_dirs` | `table` | `nil` | List of allowed project paths. |
 
 ## Requirements
 
 * **Neovim 0.10+**
 * **Norminette**: Installed and accessible in your path.
-* **42 Header**: The `42header` plugin .
+* **42 Header**: The `42header` plugin.
