@@ -492,32 +492,50 @@ local function generate_makefile(bufnr)
 	bufnr = bufnr or vim.api.nvim_get_current_buf()
 	local filepath = vim.api.nvim_buf_get_name(bufnr)
 
+	-- 1. Directory Check
 	if not is_in_active_dir(filepath) then
 		return
 	end
-	if vim.api.nvim_buf_line_count(bufnr) > 1 then
+
+	-- 2. Buffer Content Check
+	-- Instead of checking line count > 1, check if our stub is already there
+	local existing_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+	local content = table.concat(existing_lines, "\n")
+	if content:match("all:") or content:match("NAME%s*=") then
 		return
 	end
 
-	if vim.fn.exists(":Stdheader") > 0 then
-		vim.cmd("Stdheader")
+	-- 3. Ensure Header exists
+	-- If the buffer is empty or doesn't have a 42 header, try to add it
+	if not content:match("/%* %*+ %*/") then
+		if vim.fn.exists(":Stdheader") > 0 then
+			vim.cmd("Stdheader")
+			-- Refresh lines after header insertion
+			existing_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+		end
 	end
 
-	local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+	-- 4. Clean up trailing blank lines from the header plugin
+	local lines = existing_lines
 	while #lines > 0 and lines[#lines]:match("^%s*$") do
 		table.remove(lines)
 	end
 	vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
+	-- 5. Append the Stub
 	local stub_lines = vim.split(M.config.makefile_stub, "\n")
-	if #lines > 0 then
-		table.insert(stub_lines, 1, "")
-	end
+	-- Add one leading newline to separate from header
+	table.insert(stub_lines, 1, "")
+
 	vim.api.nvim_buf_set_lines(bufnr, -1, -1, false, stub_lines)
 
+	-- 6. UI: Jump to NAME
 	vim.schedule(function()
-		vim.fn.search("NAME")
-		vim.cmd("normal! ^")
+		-- Search from the top
+		vim.fn.cursor(1, 1)
+		if vim.fn.search("NAME") > 0 then
+			vim.cmd("normal! $")
+		end
 	end)
 end
 
@@ -538,7 +556,7 @@ function M.setup(opts)
 	end
 
 	if M.config.auto_makefile then
-		vim.api.nvim_create_autocmd("BufNewFile", {
+		vim.api.nvim_create_autocmd({ "BufNewFile", "BufReadPost" }, {
 			pattern = { "Makefile", "makefile" },
 			group = vim.api.nvim_create_augroup("NorminetteMakeGen", { clear = true }),
 			callback = function(args)
