@@ -491,90 +491,68 @@ end
 
 local function update_makefile_sources()
 	local bufnr = vim.api.nvim_get_current_buf()
-	local filename = vim.api.nvim_buf_get_name(bufnr)
-
-	if not filename:match("[Mm]akefile") and not filename:match("Makefile") then
-		vim.notify("Not a Makefile", vim.log.levels.ERROR)
-		return
-	end
-
 	local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-	local src_dir_name = nil
-	local srcs_start_idx = nil
-	local srcs_end_idx = nil
 
-	-- 1. Parse the Makefile for SRC_DIR and the SRCS block boundaries
+	local src_var_name = "SRC_DIR" -- The variable name in Makefile
+	local actual_dir = "src" -- The actual folder name
+	local start_idx, end_idx = nil, nil
+
+	-- 1. Parse Makefile to see what the user called their src directory
 	for i, line in ipairs(lines) do
-		-- Find SRC_DIR = folder_name
-		local dir_match = line:match("^SRC_DIR%s*=%s*([%w%d%/_%.%-]+)")
-		if dir_match then
-			src_dir_name = dir_match:gsub("%s+", "")
+		local var, val = line:match("^([%w_]+)%s*=%s*([%w%d%/_%.%-]+)")
+		if var == "SRC_DIR" then
+			actual_dir = val:gsub("%s+", "")
 		end
-
-		-- Find start of SRCS = ...
 		if line:match("^SRCS%s*=") then
-			srcs_start_idx = i
+			start_idx = i
 		end
-
-		-- Find end of SRCS block (next variable or empty line)
-		if srcs_start_idx and not srcs_end_idx and i > srcs_start_idx then
+		if start_idx and not end_idx and i > start_idx then
 			if line == "" or line:match("^[%w_%.%-]+%s*=") then
-				srcs_end_idx = i - 1
+				end_idx = i - 1
 			end
 		end
 	end
 
-	-- Fallback if SRC_DIR isn't defined, default to 'src'
-	src_dir_name = src_dir_name or "src"
-
-	if not srcs_start_idx then
-		vim.notify("Could not find SRCS block", vim.log.levels.ERROR)
+	if not start_idx then
 		return
 	end
+	end_idx = end_idx or #lines
 
-	-- If no end was found (SRCS is at the bottom of the file)
-	srcs_end_idx = srcs_end_idx or #lines
+	-- 2. Scan the actual directory but strip the path for the variable
+	local full_path = vim.fn.getcwd() .. "/" .. actual_dir
+	local found_files = vim.fn.globpath(full_path, "**/*.c", false, true)
+	local formatted_files = {}
 
-	-- 2. Scan the detected directory
-	local full_src_path = vim.fn.getcwd() .. "/" .. src_dir_name
-	if vim.fn.isdirectory(full_src_path) == 0 then
-		vim.notify("Directory '" .. src_dir_name .. "' not found", vim.log.levels.WARN)
-		return
-	end
-
-	local found_files = vim.fn.globpath(full_src_path, "**/*.c", false, true)
-	if #found_files == 0 then
-		vim.notify("No .c files found in " .. src_dir_name, vim.log.levels.INFO)
-		return
-	end
-
-	-- 3. Format the paths relative to the Makefile
-	local relative_files = {}
 	for _, file in ipairs(found_files) do
-		table.insert(relative_files, vim.fn.fnamemodify(file, ":."))
-	end
-	table.sort(relative_files)
+		-- Strip the full path and the src_dir part to get just the subfolders/file
+		-- Example: /home/user/42/src/utils/ft_split.c -> utils/ft_split.c
+		local rel_to_src = vim.fn.fnamemodify(file, ":t")
+		local sub_dir = vim.fn.fnamemodify(file, ":h"):sub(#full_path + 2)
 
-	-- 4. Build the new SRCS block
+		local final_path = ""
+		if sub_dir ~= "" then
+			final_path = "$(" .. src_var_name .. ")/" .. sub_dir .. "/" .. rel_to_src
+		else
+			final_path = "$(" .. src_var_name .. ")/" .. rel_to_src
+		end
+		table.insert(formatted_files, final_path)
+	end
+	table.sort(formatted_files)
+
+	-- 3. Construct the block with proper alignment
 	local new_lines = {}
-	for i, file in ipairs(relative_files) do
+	for i, file in ipairs(formatted_files) do
 		if i == 1 then
-			table.insert(new_lines, "SRCS		= " .. file .. " \\")
-		elseif i == #relative_files then
+			table.insert(new_lines, "SRCS		= " .. file .. (#formatted_files > 1 and " \\" or ""))
+		elseif i == #formatted_files then
 			table.insert(new_lines, "			  " .. file)
 		else
 			table.insert(new_lines, "			  " .. file .. " \\")
 		end
 	end
 
-	-- Handle case where there is only 1 file (remove trailing backslash)
-	if #relative_files == 1 then
-		new_lines[1] = new_lines[1]:gsub(" \\$", "")
-	end
-
-	-- 5. Atomic Update
-	vim.api.nvim_buf_set_lines(bufnr, srcs_start_idx - 1, srcs_end_idx, false, new_lines)
-	vim.notify("Synced " .. #relative_files .. " files from " .. src_dir_name)
+	vim.api.nvim_buf_set_lines(bufnr, start_idx - 1, end_idx, false, new_lines)
+	vim.notify("Updated SRCS using $(" .. src_var_name .. ")")
 end
 
 local function generate_makefile(bufnr)
@@ -686,6 +664,22 @@ function M.setup(opts)
 			group = vim.api.nvim_create_augroup("NorminetteLint", { clear = true }),
 			callback = function()
 				M.lint()
+			end,
+		})
+	end
+
+	if M.config.auto_makefile then
+		vim.api.nvim_create_autocmd({ "BufNewFile", "BufReadPost" }, {
+			pattern = { "Makefile", "makefile" },
+			group = vim.api.nvim_create_augroup("NorminetteMakeGen", { clear = true }),
+			callback = function(args)
+				vim.schedule(function()
+					vim.schedule(function()
+						if vim.api.nvim_buf_is_valid(args.buf) then
+							generate_makefile(args.buf)
+						end
+					end)
+				end)
 			end,
 		})
 	end
