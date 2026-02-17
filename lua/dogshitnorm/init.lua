@@ -8,6 +8,7 @@ local default_config = {
 	pattern = { "*.c", "*.h", "[Mm]akefile" },
 	lint_on_save = true,
 	keybinding = "<leader>cn",
+	auto_header_guard = true,
 }
 
 M.config = {}
@@ -320,9 +321,6 @@ function M.lint()
 		return
 	end
 
-	local bufnr = vim.api.nvim_get_current_buf()
-	local filename = vim.api.nvim_buf_get_name(bufnr)
-
 	if filename == "" then
 		return
 	end
@@ -411,6 +409,56 @@ end
 
 function M.setup(opts)
 	M.config = vim.tbl_deep_extend("force", default_config, opts or {})
+
+	-- AUTOGENERATOR: Header guards for empty or near-empty .h files
+	if M.config.auto_header_guard then
+		vim.api.nvim_create_autocmd({ "BufEnter", "BufReadPost" }, {
+			pattern = "*.h",
+			group = vim.api.nvim_create_augroup("NorminetteAutoGuard", { clear = true }),
+			callback = function(args)
+				local bufnr = args.buf
+				local filename = vim.api.nvim_buf_get_name(bufnr)
+				local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+				local content = table.concat(lines, "\n")
+
+				-- Skip if it already has inclusion guards
+				if content:match("#%s*ifndef") then
+					return
+				end
+
+				-- Only run on files that essentially just have the 42 header (or are empty)
+				-- 42 header is exactly 11 lines. We allow <= 12 to handle a trailing newline.
+				if #lines > 12 then
+					return
+				end
+
+				local basename = filename:match("^.+/(.+)$") or filename
+				local expected_macro = basename:upper():gsub("%.", "_")
+
+				local new_lines = {
+					"",
+					"#ifndef " .. expected_macro,
+					"# define " .. expected_macro,
+					"",
+					"",
+					"#endif",
+				}
+
+				-- Append to the end of the buffer
+				vim.api.nvim_buf_set_lines(bufnr, -1, -1, false, new_lines)
+
+				-- Drop cursor exactly on the empty line between define and endif
+				-- If the original had N lines, the new cursor position is N + 5
+				local new_cursor_line = #lines + 5
+
+				-- Ensure we are only setting the cursor in the active window
+				if vim.api.nvim_get_current_buf() == bufnr then
+					vim.api.nvim_win_set_cursor(0, { new_cursor_line, 0 })
+					vim.cmd("startinsert") -- Drop into Insert mode so you can type immediately
+				end
+			end,
+		})
+	end
 
 	vim.api.nvim_create_user_command("Norminette", function()
 		M.lint()
