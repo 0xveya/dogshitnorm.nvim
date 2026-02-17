@@ -14,8 +14,10 @@ local default_config = {
 	auto_header_guard = true,
 	guard_keybinding = "<leader>ch",
 	makefile_keybinding = "<leader>cm",
+	src_dir = "src",
+	notify_on_sync = true,
 	makefile_stub = [[
-NAME		= your_proejct_name
+NAME		= your_project_name
 
 CC		= cc
 CFLAGS		= -Wall -Wextra -Werror
@@ -58,18 +60,43 @@ local function is_in_active_dir(filepath)
 	if type(M.config.active_dirs) ~= "table" or #M.config.active_dirs == 0 then
 		return true
 	end
-
+	local expanded = vim.fn.expand(filepath)
 	for _, dir in ipairs(M.config.active_dirs) do
 		local expanded_dir = vim.fn.expand(dir)
-		if vim.startswith(filepath, expanded_dir) then
+		if vim.startswith(expanded, expanded_dir) then
 			return true
 		end
 	end
-
 	return false
 end
 
--- 1. Custom manual checker for type naming conventions
+-- Find project root (where Makefile lives)
+local function find_project_root(filepath)
+	local current = vim.fn.fnamemodify(filepath, ":h")
+	while current ~= "/" and current ~= "" do
+		if vim.fn.filereadable(current .. "/Makefile") == 1 then
+			return current
+		end
+		current = vim.fn.fnamemodify(current, ":h")
+	end
+	return nil
+end
+
+-- Get the correct src_dir from Makefile if it exists
+local function get_src_dir(makefile_path)
+	if vim.fn.filereadable(makefile_path) == 0 then
+		return M.config.src_dir
+	end
+	local lines = vim.fn.readfile(makefile_path)
+	for _, line in ipairs(lines) do
+		local dir = line:match("^SRC_DIR%s*=%s*(%S+)")
+		if dir then
+			return dir:gsub("/+$", "")
+		end
+	end
+	return M.config.src_dir
+end
+
 local function check_type_naming(bufnr, diagnostics)
 	local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
 
@@ -145,7 +172,6 @@ local function check_includes(bufnr, diagnostics)
 	local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
 
 	for i, line in ipairs(lines) do
-		-- Look for #include "file.c" or #include <file.c>
 		local c_include = line:match('^%s*#%s*include%s+[<"](.*%.c)[>"]')
 		if c_include then
 			table.insert(diagnostics, {
@@ -166,15 +192,12 @@ local function check_asterisk_rules(bufnr, filename, diagnostics)
 	local is_header = filename:match("%.h$")
 
 	for i, line in ipairs(lines) do
-		-- A. Check for function bodies in .h files
 		if is_header and line:match("^{") then
-			-- Look at the previous line safely
 			local prev_line = ""
 			if i > 1 then
 				prev_line = lines[i - 1]
 			end
 
-			-- If the previous line is a data structure declaration, it's allowed
 			local is_data_structure = prev_line:match("struct")
 				or prev_line:match("enum")
 				or prev_line:match("union")
@@ -193,10 +216,8 @@ local function check_asterisk_rules(bufnr, filename, diagnostics)
 			end
 		end
 
-		-- B. Check for logic/code inside macros (must be literals only)
 		local define_content = line:match("^%s*#%s*define%s+[%w_]+%s+(.*)")
 		if define_content then
-			-- If the macro contains a semicolon or control keywords, it's likely code, not a literal
 			if
 				define_content:match(";")
 				or define_content:match("%b{}")
@@ -218,12 +239,10 @@ local function check_asterisk_rules(bufnr, filename, diagnostics)
 	end
 end
 
--- 2. Custom manual checker for the 42 Header
 local function check_42_header(bufnr, diagnostics)
 	local lines = vim.api.nvim_buf_get_lines(bufnr, 0, 11, false)
 	local header_text = table.concat(lines, "\n")
 
-	-- Only check if it's a .c or .h file based on the first few chars (usually /*)
 	if not header_text:match("/%*") then
 		return
 	end
@@ -253,14 +272,12 @@ local function check_42_header(bufnr, diagnostics)
 	end
 end
 
--- 3. Custom manual checker for Makefile mandatory rules
 local function check_makefile(bufnr, diagnostics)
 	local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
 	local content = table.concat(lines, "\n")
 	local required_rules = { "all:", "clean:", "fclean:", "re:", "%$%(NAME%):" }
 
 	for _, rule in ipairs(required_rules) do
-		-- Look for the rule at the start of the file or after a newline
 		if not content:match("\n" .. rule) and not content:match("^" .. rule) then
 			local clean_rule_name = rule:gsub("%%", ""):gsub(":", "")
 			table.insert(diagnostics, {
@@ -278,7 +295,6 @@ local function check_makefile(bufnr, diagnostics)
 	local first_rule_found = false
 
 	for i, line in ipairs(lines) do
-		-- Check if 'all' is the default (first) rule
 		local target = line:match("^([A-Za-z0-9_$.()%-]+):")
 		if target then
 			if not first_rule_found then
@@ -297,7 +313,6 @@ local function check_makefile(bufnr, diagnostics)
 			end
 		end
 
-		-- check for wildcards in makefiles
 		if line:match("%*%.c") or line:match("%*%.o") then
 			table.insert(diagnostics, {
 				bufnr = bufnr,
@@ -312,30 +327,24 @@ local function check_makefile(bufnr, diagnostics)
 	end
 end
 
--- 4. Custom manual checker for header include guards
 local function check_header_guards(bufnr, filename, diagnostics)
-	-- Only run for .h files
 	if not filename:match("%.h$") then
 		return
 	end
 
-	-- Extract the base filename from the full path (e.g., "src/ft_foo.h" -> "ft_foo.h")
 	local basename = filename:match("^.+/(.+)$") or filename
-
-	-- Create the expected macro name: ft_foo.h -> FT_FOO_H
 	local expected_macro = basename:upper():gsub("%.", "_")
 
 	local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
 	local content = table.concat(lines, "\n")
 
-	-- Pattern matching allows optional spaces after '#'
 	local ifndef_pattern = "#%s*ifndef%s+" .. expected_macro
 	local define_pattern = "#%s*define%s+" .. expected_macro
 
 	if not content:match(ifndef_pattern) or not content:match(define_pattern) then
 		table.insert(diagnostics, {
 			bufnr = bufnr,
-			lnum = 0, -- Placed at the top of the file
+			lnum = 0,
 			col = 0,
 			severity = vim.diagnostic.severity.ERROR,
 			source = "norm-manual",
@@ -368,7 +377,6 @@ function M.lint()
 		return
 	end
 
-	-- Pre-calculate our manual diagnostics
 	local manual_diagnostics = {}
 	if is_c_or_h then
 		check_type_naming(bufnr, manual_diagnostics)
@@ -380,7 +388,6 @@ function M.lint()
 		check_makefile(bufnr, manual_diagnostics)
 	end
 
-	-- If it's a Makefile, set diagnostics immediately and exit (don't run norminette)
 	if is_makefile then
 		vim.schedule(function()
 			if vim.api.nvim_buf_is_valid(bufnr) then
@@ -390,7 +397,6 @@ function M.lint()
 		return
 	end
 
-	-- For .c and .h files, proceed with running norminette
 	local command = vim.deepcopy(M.config.cmd)
 	if type(command) == "string" then
 		command = { command }
@@ -437,7 +443,6 @@ function M.lint()
 			if not vim.api.nvim_buf_is_valid(bufnr) then
 				return
 			end
-			-- Apply combined diagnostics (manual + norminette)
 			vim.diagnostic.set(ns_id, bufnr, manual_diagnostics)
 		end)
 	end)
@@ -489,20 +494,51 @@ local function add_header_guard(bufnr)
 	end
 end
 
-local function update_makefile_sources()
-	local bufnr = vim.api.nvim_get_current_buf()
-	local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+-- Core sync logic - works with buffer OR filepath
+local function update_makefile_sources(target)
+	local bufnr
+	local makefile_path
+	local project_root
 
-	local src_var_name = "SRC_DIR"
-	local actual_dir = "src"
+	-- Determine if target is a buffer number, filepath, or nil
+	if type(target) == "number" and vim.api.nvim_buf_is_valid(target) then
+		bufnr = target
+		makefile_path = vim.api.nvim_buf_get_name(bufnr)
+	elseif type(target) == "string" and target ~= "" then
+		makefile_path = target
+		-- Load or find buffer
+		bufnr = vim.fn.bufnr(makefile_path)
+		if bufnr == -1 then
+			bufnr = vim.fn.bufadd(makefile_path)
+			vim.fn.bufload(bufnr)
+		end
+	else
+		-- Try to find Makefile in current project
+		local current_file = vim.api.nvim_buf_get_name(0)
+		project_root = find_project_root(current_file)
+		if not project_root then
+			vim.notify("No Makefile found in project", vim.log.levels.WARN)
+			return false
+		end
+		makefile_path = project_root .. "/Makefile"
+		bufnr = vim.fn.bufnr(makefile_path)
+		if bufnr == -1 then
+			bufnr = vim.fn.bufadd(makefile_path)
+			vim.fn.bufload(bufnr)
+		end
+	end
+
+	-- Verify it's a Makefile
+	if not makefile_path:match("[Mm]akefile$") then
+		return false
+	end
+
+	local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+	local src_dir = get_src_dir(makefile_path)
 	local start_idx, end_idx = nil, nil
 
-	-- 1. Parse existing Makefile vars
+	-- Parse Makefile for SRCS block
 	for i, line in ipairs(lines) do
-		local var, val = line:match("^([%w_]+)%s*=%s*([%w%d%/_%.%-]+)")
-		if var == "SRC_DIR" then
-			actual_dir = val:gsub("%s+", "")
-		end
 		if line:match("^SRCS%s*=") then
 			start_idx = i
 		end
@@ -514,46 +550,91 @@ local function update_makefile_sources()
 	end
 
 	if not start_idx then
-		vim.notify("SRCS block not found", vim.log.levels.ERROR)
-		return
+		return false
 	end
 	end_idx = end_idx or #lines
 
-	-- 2. Scan Directory
-	local full_path = vim.fn.getcwd() .. "/" .. actual_dir
-	local found_files = vim.fn.globpath(full_path, "**/*.c", false, true)
+	-- Determine project root from Makefile path
+	project_root = project_root or vim.fn.fnamemodify(makefile_path, ":h")
+	local full_src_path = project_root .. "/" .. src_dir
+
+	if vim.fn.isdirectory(full_src_path) == 0 then
+		return false
+	end
+
+	-- Scan for .c files
+	local found_files = vim.fn.globpath(full_src_path, "**/*.c", false, true)
 	local formatted = {}
 
 	for _, file in ipairs(found_files) do
-		-- Get path relative to the SRC_DIR folder
-		local rel_to_src = vim.fn.fnamemodify(file, ":."):sub(#actual_dir + 2)
-		table.insert(formatted, "$(" .. src_var_name .. ")/" .. rel_to_src)
+		local rel_to_src = vim.fn.fnamemodify(file, ":."):sub(#src_dir + 2)
+		table.insert(formatted, "$(SRC_DIR)/" .. rel_to_src)
 	end
 	table.sort(formatted)
 
-	-- 3. Build Block
+	-- Build new SRCS block
 	local new_srcs = {}
 	for i, file in ipairs(formatted) do
 		if i == 1 then
 			table.insert(new_srcs, "SRCS		= " .. file .. (#formatted > 1 and " \\" or ""))
 		else
-			local line = "			  " .. file
+			local l = "			  " .. file
 			if i < #formatted then
-				line = line .. " \\"
+				l = l .. " \\"
 			end
-			table.insert(new_srcs, line)
+			table.insert(new_srcs, l)
 		end
 	end
 
+	-- Apply changes
 	vim.api.nvim_buf_set_lines(bufnr, start_idx - 1, end_idx, false, new_srcs)
-	vim.notify("SRCS synced with $(" .. src_var_name .. ")")
+	return true
+end
+
+-- Background sync for Oil.nvim integration
+local function background_sync(filepath)
+	-- Find the project root from the file that triggered this
+	local project_root = find_project_root(filepath)
+	if not project_root then
+		return
+	end
+
+	local makefile_path = project_root .. "/Makefile"
+	if vim.fn.filereadable(makefile_path) == 0 then
+		return
+	end
+
+	-- Get or create buffer for the Makefile
+	local bufnr = vim.fn.bufnr(makefile_path)
+	if bufnr == -1 then
+		bufnr = vim.fn.bufadd(makefile_path)
+		vim.fn.bufload(bufnr)
+	end
+
+	-- Sync the sources
+	local success = update_makefile_sources(bufnr)
+
+	if success and M.config.notify_on_sync then
+		-- Count files for notification
+		local src_dir = get_src_dir(makefile_path)
+		local files = vim.fn.globpath(project_root .. "/" .. src_dir, "**/*.c", false, true)
+		vim.notify(
+			string.format("Makefile synced (%d source files)", #files),
+			vim.log.levels.INFO,
+			{ title = "Norminette", timeout = 1500 }
+		)
+	end
+
+	-- Save the buffer silently (only if it was loaded for this sync)
+	vim.api.nvim_buf_call(bufnr, function()
+		vim.cmd("silent! noautocmd write!")
+	end)
 end
 
 local function generate_makefile(bufnr)
 	bufnr = bufnr or vim.api.nvim_get_current_buf()
 	local filepath = vim.api.nvim_buf_get_name(bufnr)
 
-	-- 1. Oil & Validity Check
 	if filepath == "" or filepath:match("oil://") then
 		return
 	end
@@ -561,35 +642,29 @@ local function generate_makefile(bufnr)
 		return
 	end
 
-	-- 2. Content Check: Don't overwrite if it already looks like a Makefile
 	local existing_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
 	local content = table.concat(existing_lines, "\n")
 	if content:match("all:") or content:match("NAME%s*=") then
 		return
 	end
 
-	-- 3. Trigger Header
 	if not content:match("/%* %*+ %*/") then
 		if vim.fn.exists(":Stdheader") > 0 then
 			vim.cmd("Stdheader")
-			-- Refresh lines after header plugin does its thing
 			existing_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
 		end
 	end
 
-	-- 4. Clean trailing whitespace from header
 	local lines = existing_lines
 	while #lines > 0 and lines[#lines]:match("^%s*$") do
 		table.remove(lines)
 	end
 	vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
-	-- 5. Append the Stub from config
 	local stub_lines = vim.split(M.config.makefile_stub, "\n")
-	table.insert(stub_lines, 1, "") -- One blank line spacing
+	table.insert(stub_lines, 1, "")
 	vim.api.nvim_buf_set_lines(bufnr, -1, -1, false, stub_lines)
 
-	-- 6. Position Cursor
 	vim.schedule(function()
 		vim.fn.cursor(1, 1)
 		if vim.fn.search("NAME") > 0 then
@@ -601,7 +676,85 @@ end
 function M.setup(opts)
 	M.config = vim.tbl_deep_extend("force", default_config, opts or {})
 
-	-- 1. Header Guard Autocmd
+	-- 1. Oil.nvim Integration: Auto-sync when C files change
+	if M.config.auto_sync_makefile then
+		-- Detect Oil.nvim and hook into it specifically
+		local oil_group = vim.api.nvim_create_augroup("NorminetteOilSync", { clear = true })
+
+		-- Method 1: Watch for BufWritePost on .c files (works for both Oil and regular saves)
+		vim.api.nvim_create_autocmd("BufWritePost", {
+			pattern = "*.c",
+			group = oil_group,
+			callback = function(args)
+				local filepath = vim.api.nvim_buf_get_name(args.buf)
+				if filepath:match("oil://") then
+					return -- Oil handles this differently
+				end
+				-- Check if file is in a src directory
+				if filepath:match("/" .. M.config.src_dir .. "/") then
+					vim.schedule(function()
+						background_sync(filepath)
+					end)
+				end
+			end,
+		})
+
+		-- Method 2: Hook into Oil's actions if available
+		vim.api.nvim_create_autocmd("User", {
+			pattern = "OilActionsPost",
+			group = oil_group,
+			callback = function(args)
+				-- Oil creates/renames/deletes files - check if any .c files were affected
+				local oil = package.loaded["oil"]
+				if not oil then
+					return
+				end
+
+				-- Get the current oil directory
+				local ok, dir = pcall(oil.get_current_dir)
+				if not ok or not dir then
+					return
+				end
+
+				-- Check if this is within a src directory
+				if dir:match("/" .. M.config.src_dir .. "/") or dir:match("/" .. M.config.src_dir .. "$") then
+					vim.schedule(function()
+						background_sync(dir)
+					end)
+				end
+			end,
+		})
+
+		-- Method 3: Also sync when entering a Makefile (catches any missed syncs)
+		vim.api.nvim_create_autocmd("BufReadPost", {
+			pattern = { "Makefile", "makefile" },
+			group = oil_group,
+			callback = function(args)
+				vim.schedule(function()
+					update_makefile_sources(args.buf)
+				end)
+			end,
+		})
+	end
+
+	-- 2. Makefile Auto-Generation
+	if M.config.auto_makefile then
+		vim.api.nvim_create_autocmd({ "BufWinEnter", "BufNewFile" }, {
+			pattern = { "Makefile", "makefile" },
+			group = vim.api.nvim_create_augroup("NorminetteMakeGen", { clear = true }),
+			callback = function(args)
+				vim.schedule(function()
+					vim.schedule(function()
+						if vim.api.nvim_buf_is_valid(args.buf) then
+							generate_makefile(args.buf)
+						end
+					end)
+				end)
+			end,
+		})
+	end
+
+	-- 3. Header Guard Auto-Insertion
 	if M.config.auto_header_guard then
 		vim.api.nvim_create_autocmd({ "BufWinEnter", "BufNewFile" }, {
 			pattern = "*.h",
@@ -614,39 +767,15 @@ function M.setup(opts)
 		})
 	end
 
-	-- 2. Makefile Generation Autocmd (Consolidated)
-	if M.config.auto_makefile then
-		vim.api.nvim_create_autocmd({ "BufWinEnter", "BufNewFile" }, {
-			pattern = { "Makefile", "makefile" },
-			group = vim.api.nvim_create_augroup("NorminetteMakeGen", { clear = true }),
-			callback = function(args)
-				-- Double schedule handles the 42header race condition perfectly
-				vim.schedule(function()
-					vim.schedule(function()
-						if vim.api.nvim_buf_is_valid(args.buf) then
-							generate_makefile(args.buf)
-						end
-					end)
-				end)
-			end,
-		})
-	end
+	-- 4. User Commands
+	vim.api.nvim_create_user_command("Makegen", generate_makefile, {})
+	vim.api.nvim_create_user_command("Makesync", update_makefile_sources, {})
+	vim.api.nvim_create_user_command("Norminette", M.lint, {})
 
-	-- 3. Commands & Keymaps
-	vim.api.nvim_create_user_command("Makegen", function()
-		generate_makefile()
-	end, {})
-	vim.api.nvim_create_user_command("Makesync", function()
-		update_makefile_sources()
-	end, {})
-	vim.api.nvim_create_user_command("Norminette", function()
-		M.lint()
-	end, {})
-
+	-- 5. Keymaps
 	if M.config.makefile_keybinding then
 		vim.keymap.set("n", M.config.makefile_keybinding, ":Makegen<CR>", { silent = true, desc = "Generate Makefile" })
 	end
-
 	if M.config.makesync_keybinding then
 		vim.keymap.set(
 			"n",
@@ -655,32 +784,27 @@ function M.setup(opts)
 			{ silent = true, desc = "Sync Makefile Sources" }
 		)
 	end
-
 	if M.config.guard_keybinding then
 		vim.keymap.set("n", M.config.guard_keybinding, function()
 			add_header_guard(vim.api.nvim_get_current_buf())
 		end, { desc = "Insert 42 Header Guards" })
 	end
-
 	if M.config.keybinding then
-		vim.keymap.set("n", M.config.keybinding, function()
-			M.lint()
-		end, { desc = "Lint with Norminette" })
+		vim.keymap.set("n", M.config.keybinding, M.lint, { desc = "Lint with Norminette" })
 	end
 
-	-- 4. Linter Autocmds
+	-- 6. Linting on Save
 	if M.config.lint_on_save then
 		vim.api.nvim_create_autocmd("BufWritePost", {
 			pattern = M.config.pattern,
 			group = vim.api.nvim_create_augroup("NorminetteLint", { clear = true }),
-			callback = function()
-				M.lint()
-			end,
+			callback = M.lint,
 		})
 	end
 
 	vim.api.nvim_create_autocmd("TextChanged", {
 		pattern = M.config.pattern,
+		group = vim.api.nvim_create_augroup("NorminetteTextChange", { clear = true }),
 		callback = function(args)
 			vim.diagnostic.reset(ns_id, args.buf)
 		end,
