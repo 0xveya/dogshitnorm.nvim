@@ -87,8 +87,24 @@ function M.update_sources(target)
 		end
 	end
 
-	vim.api.nvim_buf_set_lines(bufnr, start_idx - 1, end_idx, false, new_srcs)
-	return true, #formatted
+	-- Check if content actually changed
+	local old_block = vim.list_slice(lines, start_idx, end_idx)
+	local changed = #old_block ~= #new_srcs
+
+	if not changed then
+		for i, line in ipairs(old_block) do
+			if line ~= new_srcs[i] then
+				changed = true
+				break
+			end
+		end
+	end
+
+	if changed then
+		vim.api.nvim_buf_set_lines(bufnr, start_idx - 1, end_idx, false, new_srcs)
+	end
+
+	return true, #formatted, changed
 end
 
 function M.background_sync(filepath)
@@ -110,9 +126,10 @@ function M.background_sync(filepath)
 		vim.fn.bufload(bufnr)
 	end
 
-	local success, file_count = M.update_sources(bufnr)
+	local success, file_count, changed = M.update_sources(bufnr)
 
-	if success and cfg.notify_on_sync then
+	-- Only notify if something actually changed
+	if success and changed and cfg.notify_on_sync then
 		vim.notify(
 			string.format("Makefile synced (%d source files)", file_count),
 			vim.log.levels.INFO,
@@ -120,9 +137,12 @@ function M.background_sync(filepath)
 		)
 	end
 
-	vim.api.nvim_buf_call(bufnr, function()
-		vim.cmd("silent! noautocmd write!")
-	end)
+	-- Only save if changed
+	if changed then
+		vim.api.nvim_buf_call(bufnr, function()
+			vim.cmd("silent! noautocmd write!")
+		end)
+	end
 end
 
 function M.generate(bufnr)
