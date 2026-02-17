@@ -493,11 +493,11 @@ local function update_makefile_sources()
 	local bufnr = vim.api.nvim_get_current_buf()
 	local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
 
-	local src_var_name = "SRC_DIR" -- The variable name in Makefile
-	local actual_dir = "src" -- The actual folder name
+	local src_var_name = "SRC_DIR"
+	local actual_dir = "src"
 	local start_idx, end_idx = nil, nil
 
-	-- 1. Parse Makefile to see what the user called their src directory
+	-- 1. Parse existing Makefile vars
 	for i, line in ipairs(lines) do
 		local var, val = line:match("^([%w_]+)%s*=%s*([%w%d%/_%.%-]+)")
 		if var == "SRC_DIR" then
@@ -514,91 +514,83 @@ local function update_makefile_sources()
 	end
 
 	if not start_idx then
+		vim.notify("SRCS block not found", vim.log.levels.ERROR)
 		return
 	end
 	end_idx = end_idx or #lines
 
-	-- 2. Scan the actual directory but strip the path for the variable
+	-- 2. Scan Directory
 	local full_path = vim.fn.getcwd() .. "/" .. actual_dir
 	local found_files = vim.fn.globpath(full_path, "**/*.c", false, true)
-	local formatted_files = {}
+	local formatted = {}
 
 	for _, file in ipairs(found_files) do
-		-- Strip the full path and the src_dir part to get just the subfolders/file
-		-- Example: /home/user/42/src/utils/ft_split.c -> utils/ft_split.c
-		local rel_to_src = vim.fn.fnamemodify(file, ":t")
-		local sub_dir = vim.fn.fnamemodify(file, ":h"):sub(#full_path + 2)
-
-		local final_path = ""
-		if sub_dir ~= "" then
-			final_path = "$(" .. src_var_name .. ")/" .. sub_dir .. "/" .. rel_to_src
-		else
-			final_path = "$(" .. src_var_name .. ")/" .. rel_to_src
-		end
-		table.insert(formatted_files, final_path)
+		-- Get path relative to the SRC_DIR folder
+		local rel_to_src = vim.fn.fnamemodify(file, ":."):sub(#actual_dir + 2)
+		table.insert(formatted, "$(" .. src_var_name .. ")/" .. rel_to_src)
 	end
-	table.sort(formatted_files)
+	table.sort(formatted)
 
-	-- 3. Construct the block with proper alignment
-	local new_lines = {}
-	for i, file in ipairs(formatted_files) do
+	-- 3. Build Block
+	local new_srcs = {}
+	for i, file in ipairs(formatted) do
 		if i == 1 then
-			table.insert(new_lines, "SRCS		= " .. file .. (#formatted_files > 1 and " \\" or ""))
-		elseif i == #formatted_files then
-			table.insert(new_lines, "			  " .. file)
+			table.insert(new_srcs, "SRCS		= " .. file .. (#formatted > 1 and " \\" or ""))
 		else
-			table.insert(new_lines, "			  " .. file .. " \\")
+			local line = "			  " .. file
+			if i < #formatted then
+				line = line .. " \\"
+			end
+			table.insert(new_srcs, line)
 		end
 	end
 
-	vim.api.nvim_buf_set_lines(bufnr, start_idx - 1, end_idx, false, new_lines)
-	vim.notify("Updated SRCS using $(" .. src_var_name .. ")")
+	vim.api.nvim_buf_set_lines(bufnr, start_idx - 1, end_idx, false, new_srcs)
+	vim.notify("SRCS synced with $(" .. src_var_name .. ")")
 end
 
 local function generate_makefile(bufnr)
 	bufnr = bufnr or vim.api.nvim_get_current_buf()
 	local filepath = vim.api.nvim_buf_get_name(bufnr)
 
-	-- 1. Directory Check
+	-- 1. Oil & Validity Check
+	if filepath == "" or filepath:match("oil://") then
+		return
+	end
 	if not is_in_active_dir(filepath) then
 		return
 	end
 
-	-- 2. Buffer Content Check
-	-- Instead of checking line count > 1, check if our stub is already there
+	-- 2. Content Check: Don't overwrite if it already looks like a Makefile
 	local existing_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
 	local content = table.concat(existing_lines, "\n")
 	if content:match("all:") or content:match("NAME%s*=") then
 		return
 	end
 
-	-- 3. Ensure Header exists
-	-- If the buffer is empty or doesn't have a 42 header, try to add it
+	-- 3. Trigger Header
 	if not content:match("/%* %*+ %*/") then
 		if vim.fn.exists(":Stdheader") > 0 then
 			vim.cmd("Stdheader")
-			-- Refresh lines after header insertion
+			-- Refresh lines after header plugin does its thing
 			existing_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
 		end
 	end
 
-	-- 4. Clean up trailing blank lines from the header plugin
+	-- 4. Clean trailing whitespace from header
 	local lines = existing_lines
 	while #lines > 0 and lines[#lines]:match("^%s*$") do
 		table.remove(lines)
 	end
 	vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
-	-- 5. Append the Stub
+	-- 5. Append the Stub from config
 	local stub_lines = vim.split(M.config.makefile_stub, "\n")
-	-- Add one leading newline to separate from header
-	table.insert(stub_lines, 1, "")
-
+	table.insert(stub_lines, 1, "") -- One blank line spacing
 	vim.api.nvim_buf_set_lines(bufnr, -1, -1, false, stub_lines)
 
-	-- 6. UI: Jump to NAME
+	-- 6. Position Cursor
 	vim.schedule(function()
-		-- Search from the top
 		vim.fn.cursor(1, 1)
 		if vim.fn.search("NAME") > 0 then
 			vim.cmd("normal! $")
@@ -609,70 +601,26 @@ end
 function M.setup(opts)
 	M.config = vim.tbl_deep_extend("force", default_config, opts or {})
 
+	-- 1. Header Guard Autocmd
 	if M.config.auto_header_guard then
-		vim.api.nvim_create_autocmd({ "BufEnter", "BufNewFile" }, {
+		vim.api.nvim_create_autocmd({ "BufWinEnter", "BufNewFile" }, {
 			pattern = "*.h",
 			group = vim.api.nvim_create_augroup("NorminetteAutoGuard", { clear = true }),
 			callback = function(args)
-				local bufnr = args.buf
 				vim.schedule(function()
-					add_header_guard(bufnr)
+					add_header_guard(args.buf)
 				end)
 			end,
 		})
 	end
 
+	-- 2. Makefile Generation Autocmd (Consolidated)
 	if M.config.auto_makefile then
-		vim.api.nvim_create_autocmd({ "BufNewFile", "BufReadPost" }, {
+		vim.api.nvim_create_autocmd({ "BufWinEnter", "BufNewFile" }, {
 			pattern = { "Makefile", "makefile" },
 			group = vim.api.nvim_create_augroup("NorminetteMakeGen", { clear = true }),
 			callback = function(args)
-				vim.schedule(function()
-					generate_makefile(args.buf)
-				end)
-			end,
-		})
-	end
-
-	vim.api.nvim_create_user_command("Makegen", function()
-		generate_makefile()
-	end, {})
-
-	if M.config.makefile_keybinding then
-		vim.keymap.set("n", M.config.makefile_keybinding, ":Makegen<CR>", { silent = true })
-	end
-
-	if M.config.guard_keybinding then
-		vim.keymap.set("n", M.config.guard_keybinding, function()
-			add_header_guard(vim.api.nvim_get_current_buf())
-		end, { desc = "Insert 42 Header Guards" })
-	end
-
-	vim.api.nvim_create_user_command("Norminette", function()
-		M.lint()
-	end, {})
-
-	if M.config.keybinding then
-		vim.keymap.set("n", M.config.keybinding, function()
-			M.lint()
-		end, { desc = "Lint with Norminette" })
-	end
-
-	if M.config.lint_on_save then
-		vim.api.nvim_create_autocmd("BufWritePost", {
-			pattern = M.config.pattern,
-			group = vim.api.nvim_create_augroup("NorminetteLint", { clear = true }),
-			callback = function()
-				M.lint()
-			end,
-		})
-	end
-
-	if M.config.auto_makefile then
-		vim.api.nvim_create_autocmd({ "BufNewFile", "BufReadPost" }, {
-			pattern = { "Makefile", "makefile" },
-			group = vim.api.nvim_create_augroup("NorminetteMakeGen", { clear = true }),
-			callback = function(args)
+				-- Double schedule handles the 42header race condition perfectly
 				vim.schedule(function()
 					vim.schedule(function()
 						if vim.api.nvim_buf_is_valid(args.buf) then
@@ -684,9 +632,52 @@ function M.setup(opts)
 		})
 	end
 
+	-- 3. Commands & Keymaps
+	vim.api.nvim_create_user_command("Makegen", function()
+		generate_makefile()
+	end, {})
 	vim.api.nvim_create_user_command("Makesync", function()
 		update_makefile_sources()
-	end, { desc = "Update SRCS from SRC_DIR" })
+	end, {})
+	vim.api.nvim_create_user_command("Norminette", function()
+		M.lint()
+	end, {})
+
+	if M.config.makefile_keybinding then
+		vim.keymap.set("n", M.config.makefile_keybinding, ":Makegen<CR>", { silent = true, desc = "Generate Makefile" })
+	end
+
+	if M.config.makesync_keybinding then
+		vim.keymap.set(
+			"n",
+			M.config.makesync_keybinding,
+			":Makesync<CR>",
+			{ silent = true, desc = "Sync Makefile Sources" }
+		)
+	end
+
+	if M.config.guard_keybinding then
+		vim.keymap.set("n", M.config.guard_keybinding, function()
+			add_header_guard(vim.api.nvim_get_current_buf())
+		end, { desc = "Insert 42 Header Guards" })
+	end
+
+	if M.config.keybinding then
+		vim.keymap.set("n", M.config.keybinding, function()
+			M.lint()
+		end, { desc = "Lint with Norminette" })
+	end
+
+	-- 4. Linter Autocmds
+	if M.config.lint_on_save then
+		vim.api.nvim_create_autocmd("BufWritePost", {
+			pattern = M.config.pattern,
+			group = vim.api.nvim_create_augroup("NorminetteLint", { clear = true }),
+			callback = function()
+				M.lint()
+			end,
+		})
+	end
 
 	vim.api.nvim_create_autocmd("TextChanged", {
 		pattern = M.config.pattern,
