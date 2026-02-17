@@ -1,6 +1,6 @@
-local config = require("norminette.config")
-local diagnostics = require("norminette.diagnostics")
-local utils = require("norminette.utils")
+local config = require("dogshitnorm.config")
+local diagnostics = require("dogshitnorm.diagnostics")
+local utils = require("dogshitnorm.utils")
 
 local M = {}
 

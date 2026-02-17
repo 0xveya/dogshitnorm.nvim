@@ -1,8 +1,8 @@
-local config = require("norminette.config")
-local lint = require("norminette.lint")
-local makefile = require("norminette.makefile")
-local header = require("norminette.header")
-local utils = require("norminette.utils")
+local config = require("dogshitnorm.config")
+local lint = require("dogshitnorm.lint")
+local makefile = require("dogshitnorm.makefile")
+local header = require("dogshitnorm.header")
+local utils = require("dogshitnorm.utils")
 
 local M = {}
 

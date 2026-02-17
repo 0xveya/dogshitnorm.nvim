@@ -1,5 +1,5 @@
-local config = require("norminette.config")
-local utils = require("norminette.utils")
+local config = require("dogshitnorm.config")
+local utils = require("dogshitnorm.utils")
 
 local M = {}
 
