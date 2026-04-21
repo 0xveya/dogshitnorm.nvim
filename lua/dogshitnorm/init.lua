@@ -8,10 +8,6 @@ local M = {}
 
 M.lint = lint.lint
 
-local function normalize_path(path)
-	return vim.fn.fnamemodify(path, ":p"):gsub("/+$", "")
-end
-
 local function is_in_makefile_src(filepath, cfg)
 	local project_root = utils.find_project_root(filepath)
 	if not project_root then
@@ -19,8 +15,8 @@ local function is_in_makefile_src(filepath, cfg)
 	end
 
 	local src_dir = utils.get_src_dir(project_root .. "/Makefile", cfg.src_dir)
-	local source_root = normalize_path(project_root .. "/" .. src_dir)
-	local target = normalize_path(filepath)
+	local source_root = utils.normalize_path(project_root .. "/" .. src_dir)
+	local target = utils.normalize_path(filepath)
 
 	return target == source_root or vim.startswith(target, source_root .. "/")
 end

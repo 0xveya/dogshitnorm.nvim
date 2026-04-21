@@ -20,6 +20,24 @@ function M.is_in_active_dir(filepath, active_dirs)
 	return false
 end
 
+function M.normalize_path(path)
+	return vim.fn.fnamemodify(path, ":p"):gsub("/+$", "")
+end
+
+function M.relative_path(base_path, filepath)
+	local base = M.normalize_path(base_path)
+	local target = M.normalize_path(filepath)
+	local prefix = base .. "/"
+
+	if target == base then
+		return ""
+	end
+	if vim.startswith(target, prefix) then
+		return target:sub(#prefix + 1)
+	end
+	return nil
+end
+
 function M.find_project_root(filepath)
 	local current = filepath
 	if vim.fn.isdirectory(current) == 0 then

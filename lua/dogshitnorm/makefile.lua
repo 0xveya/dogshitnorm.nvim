@@ -69,8 +69,10 @@ function M.update_sources(target)
 	local formatted = {}
 
 	for _, file in ipairs(found_files) do
-		local rel_to_src = vim.fn.fnamemodify(file, ":."):sub(#src_dir + 2)
-		table.insert(formatted, "$(SRC_DIR)/" .. rel_to_src)
+		local rel_to_src = utils.relative_path(full_src_path, file)
+		if rel_to_src and rel_to_src ~= "" then
+			table.insert(formatted, "$(SRC_DIR)/" .. rel_to_src)
+		end
 	end
 	table.sort(formatted)
 
