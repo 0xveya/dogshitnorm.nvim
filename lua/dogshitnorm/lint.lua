@@ -153,41 +153,81 @@ local function merge_diagnostics(manual, norminette, suppress_duplicates)
 	return merged
 end
 
-function M.lint()
+local function target_kind(filename)
+	if filename:match("[Mm]akefile$") then
+		return "makefile"
+	end
+	if filename:match("%.[ch]$") then
+		return "c"
+	end
+	return nil
+end
+
+local function collect_manual_diagnostics(bufnr, filename, kind)
+	local manual_diagnostics = {}
+	if kind == "c" then
+		diagnostics.check_c(bufnr, filename, manual_diagnostics)
+	elseif kind == "makefile" then
+		diagnostics.check_makefile(bufnr, manual_diagnostics)
+	end
+	return manual_diagnostics
+end
+
+local function resolve_target(bufnr)
 	local cfg = config.get()
 	if not cfg.active then
-		return
+		return nil
 	end
 
-	local bufnr = vim.api.nvim_get_current_buf()
+	if type(bufnr) ~= "number" then
+		bufnr = nil
+	end
+	bufnr = bufnr or vim.api.nvim_get_current_buf()
+	if not vim.api.nvim_buf_is_valid(bufnr) then
+		return nil
+	end
+
 	local filename = vim.api.nvim_buf_get_name(bufnr)
 
 	if not utils.is_in_active_dir(filename, cfg.active_dirs) then
-		return
+		return nil
 	end
 
 	if filename == "" then
+		return nil
+	end
+
+	local kind = target_kind(filename)
+	if not kind then
+		return nil
+	end
+
+	return cfg, bufnr, filename, kind
+end
+
+function M.publish_manual(bufnr)
+	local _, target_bufnr, filename, kind = resolve_target(bufnr)
+	if not target_bufnr then
+		return false
+	end
+
+	local manual_diagnostics = collect_manual_diagnostics(target_bufnr, filename, kind)
+	vim.diagnostic.set(utils.ns_id, target_bufnr, manual_diagnostics)
+	return true
+end
+
+function M.lint(bufnr)
+	local cfg, target_bufnr, filename, kind = resolve_target(bufnr)
+	if not target_bufnr then
 		return
 	end
 
-	local is_makefile = filename:match("[Mm]akefile$")
-	local is_c_or_h = filename:match("%.[ch]$")
+	local manual_diagnostics = collect_manual_diagnostics(target_bufnr, filename, kind)
 
-	if not (is_makefile or is_c_or_h) then
-		return
-	end
-
-	local manual_diagnostics = {}
-	if is_c_or_h then
-		diagnostics.check_c(bufnr, filename, manual_diagnostics)
-	elseif is_makefile then
-		diagnostics.check_makefile(bufnr, manual_diagnostics)
-	end
-
-	if is_makefile then
+	if kind == "makefile" then
 		vim.schedule(function()
-			if vim.api.nvim_buf_is_valid(bufnr) then
-				vim.diagnostic.set(utils.ns_id, bufnr, manual_diagnostics)
+			if vim.api.nvim_buf_is_valid(target_bufnr) then
+				vim.diagnostic.set(utils.ns_id, target_bufnr, manual_diagnostics)
 			end
 		end)
 		return
@@ -196,7 +236,7 @@ function M.lint()
 	-- Publish tree-sitter diagnostics immediately so line-saver hints are
 	-- visible right away, without waiting for the async norminette process.
 	-- The norminette callback will replace these with the merged set once done.
-	vim.diagnostic.set(utils.ns_id, bufnr, manual_diagnostics)
+	vim.diagnostic.set(utils.ns_id, target_bufnr, manual_diagnostics)
 
 	local command = vim.deepcopy(cfg.cmd)
 	if type(command) == "string" then
@@ -226,16 +266,16 @@ function M.lint()
 			return
 		end
 
-		local norminette_diagnostics = parse_norminette_json(bufnr, obj.stdout)
-			or parse_norminette_human(bufnr, obj.stdout)
+		local norminette_diagnostics = parse_norminette_json(target_bufnr, obj.stdout)
+			or parse_norminette_human(target_bufnr, obj.stdout)
 		local merged_diagnostics =
 			merge_diagnostics(manual_diagnostics, norminette_diagnostics, cfg.suppress_duplicate_diagnostics)
 
 		vim.schedule(function()
-			if not vim.api.nvim_buf_is_valid(bufnr) then
+			if not vim.api.nvim_buf_is_valid(target_bufnr) then
 				return
 			end
-			vim.diagnostic.set(utils.ns_id, bufnr, merged_diagnostics)
+			vim.diagnostic.set(utils.ns_id, target_bufnr, merged_diagnostics)
 		end)
 	end)
 end

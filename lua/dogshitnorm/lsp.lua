@@ -1,4 +1,5 @@
 local fixes = require("dogshitnorm.fixes")
+local linesavers = require("dogshitnorm.linesavers")
 local utils = require("dogshitnorm.utils")
 
 local M = {}
@@ -118,6 +119,17 @@ local function add_source_action(actions, seen, filename, key, title, kind, appl
 	end
 	seen[key] = true
 	table.insert(actions, make_command_action(title, kind, "dogshitnorm.applyFix", { { key = key, uri = uri } }))
+end
+
+local function add_line_saver_actions(bufnr, actions, seen, row, uri)
+	local filename = vim.api.nvim_buf_get_name(bufnr)
+	if not filename:match("%.c$") then
+		return
+	end
+
+	for _, action in ipairs(linesavers.available_actions(bufnr, { row = row })) do
+		add_fix_action(actions, seen, action.key, action.row, action.col, uri)
+	end
 end
 
 local function add_rename_action(bufnr, actions, seen, diagnostic)
@@ -257,6 +269,9 @@ local function code_actions(params)
 			add_fix_action(actions, seen, "show_line_savers", diagnostic.lnum, diagnostic.col, uri)
 		end
 		add_rename_action(bufnr, actions, seen, diagnostic)
+	end
+	if start_line then
+		add_line_saver_actions(bufnr, actions, seen, start_line, uri)
 	end
 
 	return actions

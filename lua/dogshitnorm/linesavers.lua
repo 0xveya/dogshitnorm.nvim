@@ -236,7 +236,7 @@ function M.suggestions(bufnr, opts)
 	for _, row in ipairs(find_blank_lines(bufnr, node)) do
 		table.insert(suggestions, {
 			lnum = row,
-			text = "Remove this blank line inside the function.",
+			text = "Remove this extra blank line inside the function.",
 		})
 	end
 
@@ -273,7 +273,7 @@ function M.diagnostics(bufnr, node)
 			lnum = row,
 			col = 0,
 			code = "LINE_SAVER_BLANK",
-			message = "Line saver: remove this blank line inside the overlong function.",
+			message = "Line saver: remove this extra blank line inside the function.",
 		})
 	end
 
@@ -297,6 +297,58 @@ function M.diagnostics(bufnr, node)
 	end
 
 	return diagnostics
+end
+
+function M.available_actions(bufnr, opts)
+	if not valid_buf(bufnr) then
+		return {}
+	end
+
+	local node = target_function(bufnr, opts)
+	if not node then
+		return {}
+	end
+
+	local actions = {}
+	local first_row = nil
+	local blank_rows = find_blank_lines(bufnr, node)
+	if #blank_rows > 0 then
+		first_row = blank_rows[1]
+		table.insert(actions, {
+			key = "remove_function_blank_lines",
+			row = blank_rows[1],
+			col = 0,
+		})
+	end
+
+	local comma = find_comma_return(bufnr, node)
+	if comma then
+		first_row = first_row or comma.row
+		table.insert(actions, {
+			key = "combine_expression_return",
+			row = comma.row,
+			col = 0,
+		})
+	end
+
+	if first_row then
+		table.insert(actions, {
+			key = "apply_line_saver",
+			row = first_row,
+			col = 0,
+		})
+	end
+
+	local hints = find_while_increment_hints(bufnr, node)
+	if first_row or #hints > 0 then
+		table.insert(actions, {
+			key = "show_line_savers",
+			row = first_row or hints[1].lnum,
+			col = 0,
+		})
+	end
+
+	return actions
 end
 
 function M.show_suggestions(bufnr, opts)

@@ -228,7 +228,9 @@ function M.setup(opts)
 		vim.api.nvim_create_autocmd("BufWritePost", {
 			pattern = cfg.pattern,
 			group = vim.api.nvim_create_augroup("NorminetteLint", { clear = true }),
-			callback = M.lint,
+			callback = function(args)
+				M.lint(args.buf)
+			end,
 		})
 	end
 
@@ -236,7 +238,7 @@ function M.setup(opts)
 		pattern = cfg.pattern,
 		group = vim.api.nvim_create_augroup("NorminetteTextChange", { clear = true }),
 		callback = function(args)
-			vim.diagnostic.reset(utils.ns_id, args.buf)
+			lint.publish_manual(args.buf)
 		end,
 	})
 end

@@ -197,14 +197,23 @@ end
 local function diagnostic_actions_at_cursor(bufnr)
 	local actions = {}
 	local seen = {}
+	local row = current_lnum()
 
-	for _, diagnostic in ipairs(vim.diagnostic.get(bufnr, { lnum = current_lnum() })) do
+	for _, diagnostic in ipairs(vim.diagnostic.get(bufnr, { lnum = row })) do
 		local key = diagnostic_actions[diagnostic.code]
 		if key then
 			add_action(actions, seen, key, {
 				row = diagnostic.lnum,
 				col = diagnostic.col,
 				code = diagnostic.code,
+			})
+		end
+	end
+	if vim.api.nvim_buf_get_name(bufnr):match("%.c$") then
+		for _, action in ipairs(linesavers.available_actions(bufnr, { row = row })) do
+			add_action(actions, seen, action.key, {
+				row = action.row,
+				col = action.col,
 			})
 		end
 	end
