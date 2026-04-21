@@ -225,6 +225,43 @@ function M.suggestions(bufnr, opts)
 	return suggestions
 end
 
+function M.diagnostics(bufnr, node)
+	if not valid_buf(bufnr) or not node then
+		return {}
+	end
+
+	local diagnostics = {}
+	for _, row in ipairs(find_blank_lines(bufnr, node)) do
+		table.insert(diagnostics, {
+			lnum = row,
+			col = 0,
+			code = "LINE_SAVER_BLANK",
+			message = "Line saver: remove this blank line inside the overlong function.",
+		})
+	end
+
+	local comma = find_comma_return(bufnr, node)
+	if comma then
+		table.insert(diagnostics, {
+			lnum = comma.row,
+			col = 0,
+			code = "LINE_SAVER_COMMA_RETURN",
+			message = "Line saver: combine this expression with the following return.",
+		})
+	end
+
+	for _, hint in ipairs(find_while_increment_hints(bufnr, node)) do
+		table.insert(diagnostics, {
+			lnum = hint.lnum,
+			col = 0,
+			code = "LINE_SAVER_WHILE_HINT",
+			message = "Line saver: " .. hint.text,
+		})
+	end
+
+	return diagnostics
+end
+
 function M.show_suggestions(bufnr, opts)
 	bufnr = bufnr or vim.api.nvim_get_current_buf()
 	local suggestions = M.suggestions(bufnr, opts)

@@ -1,3 +1,6 @@
+local config = require("dogshitnorm.config")
+local linesavers = require("dogshitnorm.linesavers")
+
 local M = {}
 
 local C_SOURCE = "norm-treesitter"
@@ -427,6 +430,25 @@ local function check_compound_declaration_order(bufnr, diagnostics, node)
 	end
 end
 
+local function add_line_saver_diagnostics(bufnr, diagnostics, node)
+	local cfg = config.get()
+	if cfg.line_saver_diagnostics == false then
+		return
+	end
+
+	for _, diagnostic in ipairs(linesavers.diagnostics(bufnr, node)) do
+		add_line_diagnostic(
+			diagnostics,
+			bufnr,
+			diagnostic.lnum,
+			diagnostic.col,
+			diagnostic.code,
+			diagnostic.message,
+			vim.diagnostic.severity.HINT
+		)
+	end
+end
+
 local function check_function_definition(bufnr, diagnostics, node)
 	local function_declarator = node:field("declarator")[1]
 	if function_declarator then
@@ -445,6 +467,7 @@ local function check_function_definition(bufnr, diagnostics, node)
 				"FUNC_TOO_LONG",
 				"Each function must be at most 25 lines long, not counting its own braces."
 			)
+			add_line_saver_diagnostics(bufnr, diagnostics, node)
 		end
 
 		local totals = { count = 0 }

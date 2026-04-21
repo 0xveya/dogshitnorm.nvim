@@ -14,7 +14,7 @@ It also includes **custom built-in checks** for edge cases and subjective rules 
 * **Define Sorting**: Sorts contiguous simple `# define` blocks alphabetically with `:Definesort`, while leaving header guard defines alone.
 * **Header Prototype Sorting**: Sorts contiguous single-line function prototype blocks alphabetically with `:Protosort`, or automatically before saving when enabled.
 * **Function Line Counts**: Built-in Tree-sitter line count overlays for `.c` functions, based on the old `ft_count_lines.nvim` behavior.
-* **Line-Saving Actions**: Overlong functions get safe quickfixes for removable blank lines and `expr; return (value);` -> `return (expr, value);`. Riskier while-counter tricks are listed as suggestions instead of being applied blindly.
+* **Line-Saving Actions**: Overlong functions get low-severity diagnostic hints with code actions for removable blank lines and `expr; return (value);` -> `return (expr, value);`. Riskier while-counter tricks are listed as suggestions instead of being applied blindly.
 * **LSP Quick Fixes**: Safe fixes are exposed through Neovim's LSP code-action UI, plus `:NormFix` and `:NormFixAll`. This includes header guards, include/define/prototype sorting, Makefile source sync, whitespace cleanup, missing `void` parameters, missing return parentheses, missing blank lines between functions, and overlong-function line savers.
 * **Tree-sitter Extended Checks**: Strict syntax-tree checks for rules `norminette` misses:
     * **Type Naming**: Enforces `s_`, `t_`, `u_`, and `e_` prefixes.
@@ -104,6 +104,7 @@ Using [lazy.nvim]():
 | `line_count_keybinding` | `string` | `"<leader>cl"` | Keymap to toggle function line counts. |
 | `line_count_limit` | `number` | `25` | Highlight function line counts above this limit as errors. |
 | `line_count_formatter` | `function` | `nil` | Optional formatter called with `(count, limit)` for line count overlays. |
+| `line_saver_diagnostics` | `boolean` | `true` | Emit hint diagnostics for safe line-saving opportunities in overlong functions. |
 | `line_saver_max_width` | `number` | `80` | Maximum generated line width for comma-expression return fixes. |
 | `auto_makefile` | `boolean` | `true` | Auto-populate new Makefiles. |
 | `auto_sync_makefile` | `boolean` | `true` | Enable the `:Makesync` command. |

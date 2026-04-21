@@ -23,6 +23,7 @@ M.defaults = {
 	line_count_keybinding = "<leader>cl",
 	line_count_limit = 25,
 	line_count_formatter = nil,
+	line_saver_diagnostics = true,
 	line_saver_max_width = 80,
 	guard_keybinding = "<leader>ch",
 	makefile_keybinding = "<leader>cm",
