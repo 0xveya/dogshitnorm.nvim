@@ -28,25 +28,119 @@ local function is_prototype(line)
 	return get_prototype_name(trimmed) ~= nil
 end
 
-local function sort_prototype_block(lines, start_idx, end_idx)
+local function find_descendant(node, node_type)
+	if node:type() == node_type then
+		return node
+	end
+	for child in node:iter_children() do
+		local found = find_descendant(child, node_type)
+		if found then
+			return found
+		end
+	end
+	return nil
+end
+
+local function get_tree_sitter_prototype_name(bufnr, node, line)
+	local function_declarator = find_descendant(node, "function_declarator")
+	if not function_declarator then
+		return nil
+	end
+
+	local declarator = function_declarator:field("declarator")[1]
+	if not declarator or declarator:type() ~= "identifier" then
+		return nil
+	end
+
+	local trimmed = line:match("^%s*(.-)%s*$")
+	if not trimmed or trimmed:match("^typedef%s+") then
+		return nil
+	end
+	if trimmed:match("%(%s*%*") or not trimmed:match(";%s*$") then
+		return nil
+	end
+
+	return vim.treesitter.get_node_text(declarator, bufnr)
+end
+
+local function collect_tree_sitter_prototypes(bufnr, lines, node, prototypes)
+	local node_type = node:type()
+
+	if node_type == "function_definition" or node_type == "compound_statement" then
+		return
+	end
+	if node_type == "declaration" then
+		local start_row, _, end_row, _ = node:range()
+		local line_idx = start_row + 1
+		local line = lines[line_idx]
+
+		if start_row == end_row and line then
+			local name = get_tree_sitter_prototype_name(bufnr, node, line)
+			if name then
+				prototypes[line_idx] = name
+			end
+		end
+		return
+	end
+	for child in node:iter_children() do
+		collect_tree_sitter_prototypes(bufnr, lines, child, prototypes)
+	end
+end
+
+local function get_tree_sitter_prototypes(bufnr, lines)
+	local ok, parser = pcall(vim.treesitter.get_parser, bufnr, "c")
+	if not ok or not parser then
+		return nil
+	end
+
+	local parsed, trees = pcall(parser.parse, parser)
+	if not parsed or not trees or not trees[1] then
+		return nil
+	end
+
+	local prototypes = {}
+	local root = trees[1]:root()
+
+	collect_tree_sitter_prototypes(bufnr, lines, root, prototypes)
+	if not next(prototypes) then
+		return nil
+	end
+
+	return prototypes
+end
+
+local function get_pattern_prototypes(lines)
+	local prototypes = {}
+
+	for i, line in ipairs(lines) do
+		if is_prototype(line) then
+			prototypes[i] = get_prototype_name(line)
+		end
+	end
+
+	return prototypes
+end
+
+local function sort_prototype_block(lines, prototypes, start_idx, end_idx)
 	local block = {}
 
 	for i = start_idx, end_idx do
-		table.insert(block, lines[i])
+		table.insert(block, {
+			line = lines[i],
+			name = prototypes[i] or get_prototype_name(lines[i]) or lines[i],
+		})
 	end
 	table.sort(block, function(a, b)
-		local name_a = get_prototype_name(a) or a
-		local name_b = get_prototype_name(b) or b
+		local name_a = a.name:lower()
+		local name_b = b.name:lower()
 
-		name_a = name_a:lower()
-		name_b = name_b:lower()
 		if name_a == name_b then
-			return a < b
+			return a.line < b.line
 		end
 		return name_a < name_b
 	end)
-	for i, line in ipairs(block) do
-		lines[start_idx + i - 1] = line
+	for i, item in ipairs(block) do
+		lines[start_idx + i - 1] = item.line
 	end
 end
 
@@ -109,16 +203,17 @@ function M.sort_prototypes(bufnr)
 
 	local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
 	local sorted_lines = vim.deepcopy(lines)
+	local prototypes = get_tree_sitter_prototypes(bufnr, lines) or get_pattern_prototypes(lines)
 	local i = 1
 
 	while i <= #sorted_lines do
-		if is_prototype(sorted_lines[i]) then
+		if prototypes[i] then
 			local start_idx = i
-			while i <= #sorted_lines and is_prototype(sorted_lines[i]) do
+			while i <= #sorted_lines and prototypes[i] do
 				i = i + 1
 			end
 			if i - start_idx > 1 then
-				sort_prototype_block(sorted_lines, start_idx, i - 1)
+				sort_prototype_block(sorted_lines, prototypes, start_idx, i - 1)
 			end
 		else
 			i = i + 1
