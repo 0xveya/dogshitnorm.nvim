@@ -75,7 +75,7 @@ local function make_command_action(title, kind, command, arguments, row, col)
 	}
 end
 
-local function add_fix_action(actions, seen, key, row, col)
+local function add_fix_action(actions, seen, key, row, col, uri)
 	if seen[key] then
 		return
 	end
@@ -102,14 +102,14 @@ local function add_fix_action(actions, seen, key, row, col)
 			titles[key],
 			"quickfix",
 			"dogshitnorm.applyFix",
-			{ { key = key, row = row, col = col } },
+			{ { key = key, row = row, col = col, uri = uri } },
 			row,
 			col
 		)
 	)
 end
 
-local function add_source_action(actions, seen, filename, key, title, kind, applies)
+local function add_source_action(actions, seen, filename, key, title, kind, applies, uri)
 	if seen[key] then
 		return
 	end
@@ -117,7 +117,7 @@ local function add_source_action(actions, seen, filename, key, title, kind, appl
 		return
 	end
 	seen[key] = true
-	table.insert(actions, make_command_action(title, kind, "dogshitnorm.applyFix", { { key = key } }))
+	table.insert(actions, make_command_action(title, kind, "dogshitnorm.applyFix", { { key = key, uri = uri } }))
 end
 
 local function add_rename_action(bufnr, actions, seen, diagnostic)
@@ -189,7 +189,7 @@ local function code_actions(params)
 				"dogshitnorm: Sort includes",
 				"source.organizeImports.dogshitnorm",
 				"dogshitnorm.applyFix",
-				{ { key = "sort_includes" } }
+				{ { key = "sort_includes", uri = uri } }
 			)
 		)
 	end
@@ -236,7 +236,7 @@ local function code_actions(params)
 		},
 	}) do
 		if wants_kind(context, action.kind) then
-			add_source_action(actions, seen, filename, action.key, action.title, action.kind, action.applies)
+			add_source_action(actions, seen, filename, action.key, action.title, action.kind, action.applies, uri)
 		end
 	end
 
@@ -249,12 +249,12 @@ local function code_actions(params)
 	for _, diagnostic in ipairs(diagnostics) do
 		local key = diagnostic_fix_keys[diagnostic.code]
 		if key then
-			add_fix_action(actions, seen, key, diagnostic.lnum, diagnostic.col)
+			add_fix_action(actions, seen, key, diagnostic.lnum, diagnostic.col, uri)
 		end
 		if diagnostic.code == "FUNC_TOO_LONG" or diagnostic.code == "TOO_MANY_LINES" then
-			add_fix_action(actions, seen, "remove_function_blank_lines", diagnostic.lnum, diagnostic.col)
-			add_fix_action(actions, seen, "combine_expression_return", diagnostic.lnum, diagnostic.col)
-			add_fix_action(actions, seen, "show_line_savers", diagnostic.lnum, diagnostic.col)
+			add_fix_action(actions, seen, "remove_function_blank_lines", diagnostic.lnum, diagnostic.col, uri)
+			add_fix_action(actions, seen, "combine_expression_return", diagnostic.lnum, diagnostic.col, uri)
+			add_fix_action(actions, seen, "show_line_savers", diagnostic.lnum, diagnostic.col, uri)
 		end
 		add_rename_action(bufnr, actions, seen, diagnostic)
 	end
@@ -298,6 +298,25 @@ local methods = {
 	["textDocument/codeAction"] = function(params, callback)
 		callback(nil, code_actions(params))
 	end,
+	["workspace/executeCommand"] = function(params, callback)
+		local cmd = params.command
+		local args = params.arguments and params.arguments[1] or {}
+		local bufnr = args.uri and vim.uri_to_bufnr(args.uri) or vim.api.nvim_get_current_buf()
+		local ok, result
+		if cmd == "dogshitnorm.applyFix" then
+			ok, result = pcall(fixes.apply_key, bufnr, args.key, args)
+		elseif cmd == "dogshitnorm.fixAll" then
+			ok, result = pcall(fixes.fix_all, bufnr)
+		else
+			callback(nil, nil)
+			return
+		end
+		if not ok then
+			callback({ code = -32603, message = tostring(result) }, nil)
+		else
+			callback(nil, result)
+		end
+	end,
 }
 
 local function command(dispatchers)
@@ -333,13 +352,24 @@ local function command(dispatchers)
 	}
 end
 
-local function apply_command(command_args, ctx)
-	local args = command_args.arguments and command_args.arguments[1] or {}
-	return fixes.apply_key(ctx.bufnr, args.key, args)
+local function resolve_bufnr(args, ctx)
+	if ctx and ctx.bufnr and vim.api.nvim_buf_is_valid(ctx.bufnr) then
+		return ctx.bufnr
+	end
+	if args.uri then
+		return vim.uri_to_bufnr(args.uri)
+	end
+	return vim.api.nvim_get_current_buf()
 end
 
-local function fix_all_command(_, ctx)
-	return fixes.fix_all(ctx.bufnr)
+local function apply_command(command_args, ctx)
+	local args = command_args.arguments and command_args.arguments[1] or {}
+	return fixes.apply_key(resolve_bufnr(args, ctx), args.key, args)
+end
+
+local function fix_all_command(command_args, ctx)
+	local args = command_args.arguments and command_args.arguments[1] or {}
+	return fixes.fix_all(resolve_bufnr(args, ctx))
 end
 
 local function rename_command(command_args, ctx)
