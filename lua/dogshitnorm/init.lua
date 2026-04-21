@@ -2,11 +2,14 @@ local config = require("dogshitnorm.config")
 local lint = require("dogshitnorm.lint")
 local makefile = require("dogshitnorm.makefile")
 local header = require("dogshitnorm.header")
+local fixes = require("dogshitnorm.fixes")
 local utils = require("dogshitnorm.utils")
 
 local M = {}
 
 M.lint = lint.lint
+M.fix = fixes.fix
+M.fix_all = fixes.fix_all
 
 local function is_in_makefile_src(filepath, cfg)
 	local project_root = utils.find_project_root(filepath)
@@ -107,7 +110,18 @@ function M.setup(opts)
 		})
 	end
 
-	-- 4. Header Prototype Sorting
+	-- 4. Include Sorting
+	if cfg.auto_sort_includes then
+		vim.api.nvim_create_autocmd("BufWritePre", {
+			pattern = { "*.c", "*.h" },
+			group = vim.api.nvim_create_augroup("NorminetteIncludeSort", { clear = true }),
+			callback = function(args)
+				header.sort_includes(args.buf)
+			end,
+		})
+	end
+
+	-- 5. Header Prototype Sorting
 	if cfg.auto_sort_prototypes then
 		vim.api.nvim_create_autocmd("BufWritePre", {
 			pattern = "*.h",
@@ -118,15 +132,24 @@ function M.setup(opts)
 		})
 	end
 
-	-- 5. User Commands
+	-- 6. User Commands
 	vim.api.nvim_create_user_command("Makegen", makefile.generate, {})
 	vim.api.nvim_create_user_command("Makesync", makefile.update_sources, {})
+	vim.api.nvim_create_user_command("Includesort", function()
+		header.sort_includes(vim.api.nvim_get_current_buf())
+	end, {})
 	vim.api.nvim_create_user_command("Protosort", function()
 		header.sort_prototypes(vim.api.nvim_get_current_buf())
 	end, {})
+	vim.api.nvim_create_user_command("NormFix", function()
+		fixes.fix(vim.api.nvim_get_current_buf())
+	end, {})
+	vim.api.nvim_create_user_command("NormFixAll", function()
+		fixes.fix_all(vim.api.nvim_get_current_buf())
+	end, {})
 	vim.api.nvim_create_user_command("Norminette", M.lint, {})
 
-	-- 6. Keymaps
+	-- 7. Keymaps
 	if cfg.makefile_keybinding then
 		vim.keymap.set("n", cfg.makefile_keybinding, ":Makegen<CR>", { silent = true, desc = "Generate Makefile" })
 	end
@@ -141,8 +164,11 @@ function M.setup(opts)
 	if cfg.keybinding then
 		vim.keymap.set("n", cfg.keybinding, M.lint, { desc = "Lint with Norminette" })
 	end
+	if cfg.fix_keybinding then
+		vim.keymap.set("n", cfg.fix_keybinding, M.fix, { desc = "Apply dogshitnorm fix" })
+	end
 
-	-- 7. Linting on Save
+	-- 8. Linting on Save
 	if cfg.lint_on_save then
 		vim.api.nvim_create_autocmd("BufWritePost", {
 			pattern = cfg.pattern,

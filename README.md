@@ -10,12 +10,18 @@ It also includes **custom built-in checks** for edge cases and subjective rules 
 * **Smart Header Guard Generator**: Automatically inserts C-style `#ifndef` guards in new `.h` files. It intelligently waits for the 42 Header to be inserted first, ensures clean spacing, and keeps you in Normal mode.
 * **Makefile Boilerplate**: Instantly populates new `Makefile`s with 42-compliant mandatory rules (`all`, `clean`, `fclean`, `re`) and a standard project structure.
 * **Smart Source Sync**: Automatically detects your `SRC_DIR` from the Makefile and syncs your `SRCS` list with all `.c` files found in that directory (recursive). No more manual typing of every new file.
+* **Include Sorting**: Sorts contiguous `#include` blocks alphabetically with `:Includesort`, or automatically before saving when enabled.
 * **Header Prototype Sorting**: Sorts contiguous single-line function prototype blocks alphabetically with `:Protosort`, or automatically before saving when enabled.
-* **Extended Manual Checks**: Strict Lua-based checks for rules `norminette` misses:
-* **Type Naming**: Enforces `s_`, `t_`, `u_`, and `e_` prefixes.
-* **42 Header Validation**: Ensures a valid header with student email and dates.
+* **Quick Fix Commands**: Apply safe fixes with `:NormFix` at the cursor or `:NormFixAll` for the current buffer.
+* **Tree-sitter Extended Checks**: Strict syntax-tree checks for rules `norminette` misses:
+    * **Type Naming**: Enforces `s_`, `t_`, `u_`, and `e_` prefixes.
+    * **42 Header Validation**: Ensures a valid header with student email and dates.
+    * **Function Limits**: Flags more than 5 functions per `.c` file, more than 4 parameters, more than 5 variables, missing `void` parameters, and unparenthesized return values.
+    * **Forbidden Syntax**: Flags `for`, `do ... while`, `switch`, `case`, `goto`, ternaries, and likely VLAs from Tree-sitter nodes.
+    * **Declaration Rules**: Flags declarations after statements, multiple variables per declaration, inline initialization in functions, mutable globals, and bad identifier casing.
+    * **Header Restrictions**: Forbids `.c` includes, late includes, function bodies, and non-header syntax in headers.
+    * **Macro Restrictions**: Flags lowercase macro names, multiline macros, and macros that contain code-like logic.
 * **Makefile Strictness**: Validates mandatory rules, ensures `all` is the default target, and forbids wildcards (`*.c`).
-* **Header Restrictions**: Forbids `.c` includes and function bodies in headers.
 
 
 * **Native Diagnostics**: Integrates with `vim.diagnostic` for virtual text and gutter signs.
@@ -67,7 +73,9 @@ Using [lazy.nvim]():
 
 * **Linting**: Save your file (`:w`) or press `<leader>cn`.
 * **Auto-Guards**: Creating a new `.h` file inside an active directory will automatically trigger the 42 Header and append inclusion guards.
+* **Include Sorting**: Run `:Includesort` inside a `.c` or `.h` file to sort contiguous include blocks. Set `auto_sort_includes = true` to run this automatically before saving C and header files.
 * **Prototype Sorting**: Run `:Protosort` inside a `.h` file to sort contiguous function prototype blocks. Set `auto_sort_prototypes = true` to run this automatically before saving headers.
+* **Quick Fixes**: Run `:NormFix` on a diagnostic line to apply a targeted fix, or `:NormFixAll` to repair safe file-level issues such as header guards, include order, and prototype order.
 * **Auto-Makefile**: Creating a new `Makefile` will trigger the 42 Header and append a project stub.
 * **Source Sync**: Press `<leader>cu` (or run `:Makesync`) inside a Makefile. The plugin will read your `SRC_DIR` variable, crawl that folder for `.c` files, and update your `SRCS` block with proper 42-style formatting and backslashes.
 
@@ -76,11 +84,15 @@ Using [lazy.nvim]():
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
 | `cmd` | `table` | `{"norminette"}` | The command to execute. |
+| `norminette_format` | `string` | `"json"` | Ask norminette for structured JSON output. Falls back to human output parsing if JSON is unavailable. |
+| `suppress_duplicate_diagnostics` | `boolean` | `true` | Hide Tree-sitter diagnostics when norminette already reported the same rule. |
 | `auto_header_guard` | `boolean` | `true` | Auto-insert guards in `.h` files. |
+| `auto_sort_includes` | `boolean` | `false` | Auto-sort contiguous `#include` blocks before saving `.c` and `.h` files. |
 | `auto_sort_prototypes` | `boolean` | `false` | Auto-sort contiguous function prototype blocks before saving `.h` files. |
 | `auto_makefile` | `boolean` | `true` | Auto-populate new Makefiles. |
 | `auto_sync_makefile` | `boolean` | `true` | Enable the `:Makesync` command. |
 | `keybinding` | `string` | `"<leader>cn"` | Keymap to trigger linting. |
+| `fix_keybinding` | `string` | `nil` | Optional keymap to trigger `:NormFix`-style fixes. |
 | `guard_keybinding` | `string` | `"<leader>ch"` | Keymap to trigger header guard. |
 | `makefile_keybinding` | `string` | `"<leader>cm"` | Keymap to trigger Makefile stub. |
 | `makesync_keybinding` | `string` | `"<leader>cu"` | Keymap to sync SRCS with SRC_DIR. |
@@ -89,5 +101,6 @@ Using [lazy.nvim]():
 ## Requirements
 
 * **Neovim 0.10+**
+* **Tree-sitter C parser**: Required for the extended `.c`/`.h` checks.
 * **Norminette**: Installed and accessible in your path.
 * **42 Header**: The `42header` plugin.
