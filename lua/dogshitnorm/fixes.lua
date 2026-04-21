@@ -1,7 +1,26 @@
 local header = require("dogshitnorm.header")
+local makefile = require("dogshitnorm.makefile")
+local textfix = require("dogshitnorm.textfix")
 local utils = require("dogshitnorm.utils")
 
 local M = {}
+
+local function sync_makefile_from_buffer(bufnr)
+	local filename = vim.api.nvim_buf_get_name(bufnr)
+
+	if filename:match("[Mm]akefile$") then
+		return makefile.sync(bufnr)
+	end
+	if vim.api.nvim_get_current_buf() == bufnr then
+		return makefile.sync()
+	end
+
+	local ok, synced = pcall(vim.api.nvim_buf_call, bufnr, makefile.sync)
+	if not ok then
+		error(synced)
+	end
+	return synced
+end
 
 local diagnostic_actions = {
 	HEADER_GUARD = "fix_header_guard",
@@ -9,6 +28,13 @@ local diagnostic_actions = {
 	HEADER_PROT_NODEF = "fix_header_guard",
 	INCLUDE_ORDER = "sort_includes",
 	INCLUDE_START_FILE = "sort_includes",
+	RETURN_PARENS = "fix_return_parentheses",
+	RETURN_PARENTHESIS = "fix_return_parentheses",
+	VOID_PARAM = "fix_void_parameter",
+	NO_ARGS_VOID = "fix_void_parameter",
+	FUNC_SPACING = "fix_function_spacing",
+	NEWLINE_PRECEDES_FUNC = "fix_function_spacing",
+	MAKEFILE_WILDCARD = "sync_makefile_sources",
 }
 
 local action_defs = {
@@ -26,11 +52,56 @@ local action_defs = {
 			return filename:match("%.[ch]$") ~= nil
 		end,
 	},
+	sort_defines = {
+		title = "Sort defines",
+		apply = header.sort_defines,
+		applies_to = function(filename)
+			return filename:match("%.[ch]$") ~= nil
+		end,
+	},
 	sort_prototypes = {
 		title = "Sort prototypes",
 		apply = header.sort_prototypes,
 		applies_to = function(filename)
 			return filename:match("%.h$") ~= nil
+		end,
+	},
+	cleanup_whitespace = {
+		title = "Clean trailing whitespace",
+		apply = textfix.cleanup_whitespace,
+		applies_to = function(filename)
+			return filename:match("%.[ch]$") ~= nil or filename:match("[Mm]akefile$") ~= nil
+		end,
+	},
+	fix_return_parentheses = {
+		title = "Wrap return value in parentheses",
+		apply = textfix.fix_return_parentheses,
+		applies_to = function(filename)
+			return filename:match("%.c$") ~= nil
+		end,
+		file_action = false,
+	},
+	fix_void_parameter = {
+		title = "Use void for empty parameter list",
+		apply = textfix.fix_void_parameter,
+		applies_to = function(filename)
+			return filename:match("%.[ch]$") ~= nil
+		end,
+		file_action = false,
+	},
+	fix_function_spacing = {
+		title = "Insert empty line before function",
+		apply = textfix.fix_function_spacing,
+		applies_to = function(filename)
+			return filename:match("%.c$") ~= nil
+		end,
+		file_action = false,
+	},
+	sync_makefile_sources = {
+		title = "Sync Makefile sources",
+		apply = sync_makefile_from_buffer,
+		applies_to = function(filename)
+			return filename:match("[Mm]akefile$") ~= nil or filename:match("%.c$") ~= nil
 		end,
 	},
 }
@@ -56,11 +127,11 @@ local function current_lnum()
 	return vim.api.nvim_win_get_cursor(0)[1] - 1
 end
 
-local function add_action(actions, seen, key)
+local function add_action(actions, seen, key, opts)
 	local action = action_defs[key]
 	if action and not seen[key] then
 		seen[key] = true
-		table.insert(actions, vim.tbl_extend("force", { key = key }, action))
+		table.insert(actions, vim.tbl_extend("force", { key = key, opts = opts }, action))
 	end
 end
 
@@ -69,9 +140,16 @@ local function file_actions(bufnr, seen)
 	local filename = vim.api.nvim_buf_get_name(bufnr)
 
 	seen = seen or {}
-	for _, key in ipairs({ "fix_header_guard", "sort_includes", "sort_prototypes" }) do
+	for _, key in ipairs({
+		"fix_header_guard",
+		"cleanup_whitespace",
+		"sort_includes",
+		"sort_defines",
+		"sort_prototypes",
+		"sync_makefile_sources",
+	}) do
 		local action = action_defs[key]
-		if action.applies_to(filename) then
+		if action.file_action ~= false and action.applies_to(filename) then
 			add_action(actions, seen, key)
 		end
 	end
@@ -85,14 +163,18 @@ local function diagnostic_actions_at_cursor(bufnr)
 	for _, diagnostic in ipairs(vim.diagnostic.get(bufnr, { lnum = current_lnum() })) do
 		local key = diagnostic_actions[diagnostic.code]
 		if key then
-			add_action(actions, seen, key)
+			add_action(actions, seen, key, {
+				row = diagnostic.lnum,
+				col = diagnostic.col,
+				code = diagnostic.code,
+			})
 		end
 	end
 	return actions, seen
 end
 
 local function apply_action(bufnr, action)
-	local ok, changed = pcall(action.apply, bufnr)
+	local ok, changed = pcall(action.apply, bufnr, action.opts)
 	if not ok then
 		vim.notify("Norm fix failed: " .. changed, vim.log.levels.ERROR)
 		return false
@@ -162,13 +244,13 @@ function M.identifier_at_diagnostic(bufnr, diagnostic)
 	return identifier_at(bufnr, diagnostic.lnum, diagnostic.col)
 end
 
-function M.apply_key(bufnr, key)
+function M.apply_key(bufnr, key, opts)
 	bufnr = bufnr or current_buf()
 	local action = action_defs[key]
 	if not action then
 		return false
 	end
-	return apply_action(bufnr, action)
+	return apply_action(bufnr, vim.tbl_extend("force", { opts = opts }, action))
 end
 
 function M.rename_identifier(bufnr, row, col, new_name)

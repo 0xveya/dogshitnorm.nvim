@@ -251,7 +251,80 @@ local function sort_include_block(lines, includes, start_idx, end_idx)
 	end
 end
 
-local function get_expected_header_guard(bufnr)
+local get_expected_header_guard
+
+local function get_define_name(bufnr, node)
+	local name = node:field("name")[1]
+	if name then
+		return vim.treesitter.get_node_text(name, bufnr)
+	end
+
+	for child in node:iter_children() do
+		if child:named() and child:type() == "identifier" then
+			return vim.treesitter.get_node_text(child, bufnr)
+		end
+	end
+	return nil
+end
+
+local function collect_defines(bufnr, node, defines, expected_guard)
+	if node:type() == "preproc_def" then
+		local start_row, _, end_row = node:range()
+		local name = get_define_name(bufnr, node)
+
+		if name and name ~= expected_guard and (start_row == end_row or end_row == start_row + 1) then
+			table.insert(defines, {
+				line_idx = start_row + 1,
+				key = name:lower(),
+			})
+		end
+		return
+	end
+
+	for child in node:iter_children() do
+		if child:named() then
+			collect_defines(bufnr, child, defines, expected_guard)
+		end
+	end
+end
+
+local function get_tree_sitter_defines(bufnr)
+	local root = get_c_root(bufnr)
+	if not root then
+		return nil
+	end
+
+	local defines = {}
+	collect_defines(bufnr, root, defines, get_expected_header_guard(bufnr))
+	table.sort(defines, function(a, b)
+		return a.line_idx < b.line_idx
+	end)
+
+	return defines
+end
+
+local function sort_define_block(lines, defines, start_idx, end_idx)
+	local block = {}
+
+	for i = start_idx, end_idx do
+		local define = defines[i]
+		table.insert(block, {
+			line = lines[define.line_idx],
+			key = define.key,
+		})
+	end
+	table.sort(block, function(a, b)
+		if a.key == b.key then
+			return a.line < b.line
+		end
+		return a.key < b.key
+	end)
+	for i, item in ipairs(block) do
+		lines[defines[start_idx + i - 1].line_idx] = item.line
+	end
+end
+
+get_expected_header_guard = function(bufnr)
 	local filename = vim.api.nvim_buf_get_name(bufnr)
 	local basename = filename:match("^.+/(.+)$") or filename
 
@@ -430,6 +503,45 @@ function M.sort_includes(bufnr)
 		end
 		if i - start_idx > 0 then
 			sort_include_block(sorted_lines, includes, start_idx, i)
+		end
+		i = i + 1
+	end
+
+	for line_idx, line in ipairs(lines) do
+		if sorted_lines[line_idx] ~= line then
+			vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, sorted_lines)
+			return true
+		end
+	end
+	return false
+end
+
+function M.sort_defines(bufnr)
+	bufnr = bufnr or vim.api.nvim_get_current_buf()
+	if not vim.api.nvim_buf_is_valid(bufnr) then
+		return false
+	end
+
+	local filename = vim.api.nvim_buf_get_name(bufnr)
+	if not filename:match("%.[ch]$") then
+		return false
+	end
+
+	local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+	local sorted_lines = vim.deepcopy(lines)
+	local defines = get_tree_sitter_defines(bufnr)
+	if not defines or #defines < 2 then
+		return false
+	end
+
+	local i = 1
+	while i <= #defines do
+		local start_idx = i
+		while i < #defines and defines[i + 1].line_idx == defines[i].line_idx + 1 do
+			i = i + 1
+		end
+		if i - start_idx > 0 then
+			sort_define_block(sorted_lines, defines, start_idx, i)
 		end
 		i = i + 1
 	end

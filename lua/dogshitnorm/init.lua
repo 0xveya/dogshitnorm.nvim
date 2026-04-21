@@ -131,6 +131,16 @@ function M.setup(opts)
 	end
 
 	-- 5. Header Prototype Sorting
+	if cfg.auto_sort_defines then
+		vim.api.nvim_create_autocmd("BufWritePre", {
+			pattern = { "*.c", "*.h" },
+			group = vim.api.nvim_create_augroup("NorminetteDefineSort", { clear = true }),
+			callback = function(args)
+				header.sort_defines(args.buf)
+			end,
+		})
+	end
+
 	if cfg.auto_sort_prototypes then
 		vim.api.nvim_create_autocmd("BufWritePre", {
 			pattern = "*.h",
@@ -144,13 +154,14 @@ function M.setup(opts)
 	-- 6. LSP Code Actions
 	if cfg.lsp_code_actions then
 		vim.api.nvim_create_autocmd({ "BufReadPost", "BufNewFile" }, {
-			pattern = { "*.c", "*.h" },
+			pattern = { "*.c", "*.h", "Makefile", "makefile" },
 			group = vim.api.nvim_create_augroup("NorminetteLspActions", { clear = true }),
 			callback = function(args)
 				lsp.start(args.buf)
 			end,
 		})
-		if vim.api.nvim_buf_get_name(0):match("%.[ch]$") then
+		local current_name = vim.api.nvim_buf_get_name(0)
+		if current_name:match("%.[ch]$") or current_name:match("[Mm]akefile$") then
 			lsp.start(vim.api.nvim_get_current_buf())
 		end
 	end
@@ -162,6 +173,9 @@ function M.setup(opts)
 	end, {})
 	vim.api.nvim_create_user_command("Includesort", function()
 		header.sort_includes(vim.api.nvim_get_current_buf())
+	end, {})
+	vim.api.nvim_create_user_command("Definesort", function()
+		header.sort_defines(vim.api.nvim_get_current_buf())
 	end, {})
 	vim.api.nvim_create_user_command("Protosort", function()
 		header.sort_prototypes(vim.api.nvim_get_current_buf())

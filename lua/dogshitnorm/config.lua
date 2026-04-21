@@ -17,6 +17,7 @@ M.defaults = {
 	auto_makefile = true,
 	auto_header_guard = true,
 	auto_sort_includes = false,
+	auto_sort_defines = false,
 	auto_sort_prototypes = false,
 	guard_keybinding = "<leader>ch",
 	makefile_keybinding = "<leader>cm",
