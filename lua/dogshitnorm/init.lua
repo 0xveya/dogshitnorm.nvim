@@ -3,6 +3,7 @@ local lint = require("dogshitnorm.lint")
 local makefile = require("dogshitnorm.makefile")
 local header = require("dogshitnorm.header")
 local fixes = require("dogshitnorm.fixes")
+local lsp = require("dogshitnorm.lsp")
 local utils = require("dogshitnorm.utils")
 
 local M = {}
@@ -99,13 +100,21 @@ function M.setup(opts)
 
 	-- 3. Header Guard Auto-Insertion
 	if cfg.auto_header_guard then
+		local guard_group = vim.api.nvim_create_augroup("NorminetteAutoGuard", { clear = true })
 		vim.api.nvim_create_autocmd({ "BufWinEnter", "BufNewFile" }, {
 			pattern = "*.h",
-			group = vim.api.nvim_create_augroup("NorminetteAutoGuard", { clear = true }),
+			group = guard_group,
 			callback = function(args)
 				vim.schedule(function()
 					header.add_header_guard(args.buf)
 				end)
+			end,
+		})
+		vim.api.nvim_create_autocmd("BufWritePre", {
+			pattern = "*.h",
+			group = guard_group,
+			callback = function(args)
+				header.fix_header_guard(args.buf)
 			end,
 		})
 	end
@@ -132,9 +141,25 @@ function M.setup(opts)
 		})
 	end
 
-	-- 6. User Commands
+	-- 6. LSP Code Actions
+	if cfg.lsp_code_actions then
+		vim.api.nvim_create_autocmd({ "BufReadPost", "BufNewFile" }, {
+			pattern = { "*.c", "*.h" },
+			group = vim.api.nvim_create_augroup("NorminetteLspActions", { clear = true }),
+			callback = function(args)
+				lsp.start(args.buf)
+			end,
+		})
+		if vim.api.nvim_buf_get_name(0):match("%.[ch]$") then
+			lsp.start(vim.api.nvim_get_current_buf())
+		end
+	end
+
+	-- 7. User Commands
 	vim.api.nvim_create_user_command("Makegen", makefile.generate, {})
-	vim.api.nvim_create_user_command("Makesync", makefile.update_sources, {})
+	vim.api.nvim_create_user_command("Makesync", function()
+		makefile.sync()
+	end, {})
 	vim.api.nvim_create_user_command("Includesort", function()
 		header.sort_includes(vim.api.nvim_get_current_buf())
 	end, {})
@@ -149,7 +174,7 @@ function M.setup(opts)
 	end, {})
 	vim.api.nvim_create_user_command("Norminette", M.lint, {})
 
-	-- 7. Keymaps
+	-- 8. Keymaps
 	if cfg.makefile_keybinding then
 		vim.keymap.set("n", cfg.makefile_keybinding, ":Makegen<CR>", { silent = true, desc = "Generate Makefile" })
 	end
@@ -168,7 +193,7 @@ function M.setup(opts)
 		vim.keymap.set("n", cfg.fix_keybinding, M.fix, { desc = "Apply dogshitnorm fix" })
 	end
 
-	-- 8. Linting on Save
+	-- 9. Linting on Save
 	if cfg.lint_on_save then
 		vim.api.nvim_create_autocmd("BufWritePost", {
 			pattern = cfg.pattern,

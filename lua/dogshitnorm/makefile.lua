@@ -3,6 +3,34 @@ local utils = require("dogshitnorm.utils")
 
 local M = {}
 
+local function is_excluded_source(project_root, filepath, exclude_dirs)
+	local rel = utils.relative_path(project_root, filepath)
+	if not rel then
+		return false
+	end
+
+	for _, dir in ipairs(exclude_dirs or {}) do
+		dir = dir:gsub("^/+", ""):gsub("/+$", "")
+		if rel == dir or vim.startswith(rel, dir .. "/") or rel:find("/" .. dir .. "/", 1, true) then
+			return true
+		end
+	end
+	return false
+end
+
+local function write_makefile_buffer(bufnr)
+	local ok, err = pcall(function()
+		vim.api.nvim_buf_call(bufnr, function()
+			vim.cmd("noautocmd write")
+		end)
+	end)
+
+	if not ok then
+		return false, err
+	end
+	return true
+end
+
 function M.update_sources(target)
 	local cfg = config.get()
 	local bufnr
@@ -69,9 +97,11 @@ function M.update_sources(target)
 	local formatted = {}
 
 	for _, file in ipairs(found_files) do
-		local rel_to_src = utils.relative_path(full_src_path, file)
-		if rel_to_src and rel_to_src ~= "" then
-			table.insert(formatted, "$(SRC_DIR)/" .. rel_to_src)
+		if not is_excluded_source(project_root, file, cfg.makefile_exclude_dirs) then
+			local rel_to_src = utils.relative_path(full_src_path, file)
+			if rel_to_src and rel_to_src ~= "" then
+				table.insert(formatted, "$(SRC_DIR)/" .. rel_to_src)
+			end
 		end
 	end
 	table.sort(formatted)
@@ -109,6 +139,39 @@ function M.update_sources(target)
 	return true, #formatted, changed
 end
 
+function M.sync(target)
+	local ok, file_count, changed = M.update_sources(target)
+	if not ok then
+		return false, file_count, changed
+	end
+	if not changed then
+		return true, file_count, false
+	end
+
+	local bufnr
+	if type(target) == "number" and vim.api.nvim_buf_is_valid(target) then
+		bufnr = target
+	elseif type(target) == "string" and target ~= "" then
+		bufnr = vim.fn.bufnr(target)
+	else
+		local project_root = utils.find_project_root(vim.api.nvim_buf_get_name(0))
+		if project_root then
+			bufnr = vim.fn.bufnr(project_root .. "/Makefile")
+		end
+	end
+
+	if not bufnr or bufnr == -1 then
+		return true, file_count, changed
+	end
+
+	local written, err = write_makefile_buffer(bufnr)
+	if not written then
+		vim.notify("Makefile sync failed to save: " .. tostring(err), vim.log.levels.ERROR)
+		return false, file_count, changed
+	end
+	return true, file_count, changed
+end
+
 function M.background_sync(filepath)
 	local cfg = config.get()
 
@@ -141,9 +204,10 @@ function M.background_sync(filepath)
 
 	-- Only save if changed
 	if changed then
-		vim.api.nvim_buf_call(bufnr, function()
-			vim.cmd("silent! noautocmd write!")
-		end)
+		local written, err = write_makefile_buffer(bufnr)
+		if not written then
+			vim.notify("Makefile sync failed to save: " .. tostring(err), vim.log.levels.ERROR)
+		end
 	end
 end
 

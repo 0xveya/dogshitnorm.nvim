@@ -12,7 +12,7 @@ It also includes **custom built-in checks** for edge cases and subjective rules 
 * **Smart Source Sync**: Automatically detects your `SRC_DIR` from the Makefile and syncs your `SRCS` list with all `.c` files found in that directory (recursive). No more manual typing of every new file.
 * **Include Sorting**: Sorts contiguous `#include` blocks alphabetically with `:Includesort`, or automatically before saving when enabled.
 * **Header Prototype Sorting**: Sorts contiguous single-line function prototype blocks alphabetically with `:Protosort`, or automatically before saving when enabled.
-* **Quick Fix Commands**: Apply safe fixes with `:NormFix` at the cursor or `:NormFixAll` for the current buffer.
+* **LSP Quick Fixes**: Safe fixes are exposed through Neovim's LSP code-action UI, plus `:NormFix` and `:NormFixAll`.
 * **Tree-sitter Extended Checks**: Strict syntax-tree checks for rules `norminette` misses:
     * **Type Naming**: Enforces `s_`, `t_`, `u_`, and `e_` prefixes.
     * **42 Header Validation**: Ensures a valid header with student email and dates.
@@ -72,12 +72,12 @@ Using [lazy.nvim]():
 ## Usage
 
 * **Linting**: Save your file (`:w`) or press `<leader>cn`.
-* **Auto-Guards**: Creating a new `.h` file inside an active directory will automatically trigger the 42 Header and append inclusion guards.
+* **Auto-Guards**: Creating or saving a `.h` file inside an active directory will automatically trigger/fix inclusion guards.
 * **Include Sorting**: Run `:Includesort` inside a `.c` or `.h` file to sort contiguous include blocks. Set `auto_sort_includes = true` to run this automatically before saving C and header files.
 * **Prototype Sorting**: Run `:Protosort` inside a `.h` file to sort contiguous function prototype blocks. Set `auto_sort_prototypes = true` to run this automatically before saving headers.
-* **Quick Fixes**: Run `:NormFix` on a diagnostic line to apply a targeted fix, or `:NormFixAll` to repair safe file-level issues such as header guards, include order, and prototype order.
+* **Quick Fixes**: Use Neovim's `vim.lsp.buf.code_action()` (`gra` by default on current Neovim) on a diagnostic line, run `:NormFix`, or run `:NormFixAll` to repair safe file-level issues such as header guards, include order, prototype order, and snake_case naming.
 * **Auto-Makefile**: Creating a new `Makefile` will trigger the 42 Header and append a project stub.
-* **Source Sync**: Press `<leader>cu` (or run `:Makesync`) inside a Makefile. The plugin will read your `SRC_DIR` variable, crawl that folder for `.c` files, and update your `SRCS` block with proper 42-style formatting and backslashes.
+* **Source Sync**: Press `<leader>cu` (or run `:Makesync`) inside a Makefile. The plugin will read your `SRC_DIR` variable, crawl that folder for `.c` files, update your `SRCS` block with proper 42-style formatting and backslashes, and write the Makefile.
 
 ## Configuration
 
@@ -86,6 +86,7 @@ Using [lazy.nvim]():
 | `cmd` | `table` | `{"norminette"}` | The command to execute. |
 | `norminette_format` | `string` | `"json"` | Ask norminette for structured JSON output. Falls back to human output parsing if JSON is unavailable. |
 | `suppress_duplicate_diagnostics` | `boolean` | `true` | Hide Tree-sitter diagnostics when norminette already reported the same rule. |
+| `lsp_code_actions` | `boolean` | `true` | Start an in-process dogshitnorm LSP client that contributes code actions to `vim.lsp.buf.code_action()`. |
 | `auto_header_guard` | `boolean` | `true` | Auto-insert guards in `.h` files. |
 | `auto_sort_includes` | `boolean` | `false` | Auto-sort contiguous `#include` blocks before saving `.c` and `.h` files. |
 | `auto_sort_prototypes` | `boolean` | `false` | Auto-sort contiguous function prototype blocks before saving `.h` files. |
@@ -96,6 +97,7 @@ Using [lazy.nvim]():
 | `guard_keybinding` | `string` | `"<leader>ch"` | Keymap to trigger header guard. |
 | `makefile_keybinding` | `string` | `"<leader>cm"` | Keymap to trigger Makefile stub. |
 | `makesync_keybinding` | `string` | `"<leader>cu"` | Keymap to sync SRCS with SRC_DIR. |
+| `makefile_exclude_dirs` | `table` | `{".git",".jj","libftTester","tests","test","build"}` | Directories ignored when syncing Makefile sources. |
 | `active_dirs` | `table` | `nil` | List of allowed project paths. |
 
 ## Requirements
