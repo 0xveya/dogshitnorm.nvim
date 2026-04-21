@@ -39,6 +39,7 @@ local diagnostic_actions = {
 	TOO_MANY_LINES = "apply_line_saver",
 	LINE_SAVER_BLANK = "remove_function_blank_lines",
 	LINE_SAVER_COMMA_RETURN = "combine_expression_return",
+	LINE_SAVER_WHILE_FIX = "apply_while_increment",
 	LINE_SAVER_WHILE_HINT = "show_line_savers",
 	MAKEFILE_WILDCARD = "sync_makefile_sources",
 }
@@ -114,6 +115,14 @@ local action_defs = {
 	combine_expression_return = {
 		title = "Combine expression with return",
 		apply = linesavers.combine_expression_return,
+		applies_to = function(filename)
+			return filename:match("%.c$") ~= nil
+		end,
+		file_action = false,
+	},
+	apply_while_increment = {
+		title = "Move loop increment into expression",
+		apply = linesavers.apply_while_increment,
 		applies_to = function(filename)
 			return filename:match("%.c$") ~= nil
 		end,

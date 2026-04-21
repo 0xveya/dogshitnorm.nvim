@@ -1,5 +1,6 @@
 local config = require("dogshitnorm.config")
 local linecount = require("dogshitnorm.linecount")
+local utils = require("dogshitnorm.utils")
 
 local M = {}
 
@@ -148,6 +149,81 @@ local function find_blank_lines(bufnr, node)
 	return blank_rows
 end
 
+local function increment_match(line)
+	local start_col, var, end_col = line:match("^%s*()([%a_][%w_]*)()%+%+;%s*$")
+	if var then
+		return var, start_col - 1, end_col - 1
+	end
+
+	start_col, var, end_col = line:match("^%s*%+%+()([%a_][%w_]*)()%s*;%s*$")
+	if var then
+		return var, start_col - 1, end_col - 1
+	end
+
+	start_col, var, end_col = line:match("^%s*()([%a_][%w_]*)()%-%-;%s*$")
+	if var then
+		return var, start_col - 1, end_col - 1
+	end
+
+	start_col, var, end_col = line:match("^%s*%-%-()([%a_][%w_]*)()%s*;%s*$")
+	if var then
+		return var, start_col - 1, end_col - 1
+	end
+
+	return nil
+end
+
+local function deref_pattern(var)
+	return "%*%s*" .. var .. "%f[^%w_]"
+end
+
+local function identifier_pattern(var)
+	return "%f[%w_]" .. var .. "%f[^%w_]"
+end
+
+local function deref_count(line, var)
+	local count = 0
+	for _ in line:gmatch(deref_pattern(var)) do
+		count = count + 1
+	end
+	return count
+end
+
+local function replace_first_deref(line, var)
+	local replaced = false
+	local updated = line:gsub(deref_pattern(var), function()
+		if replaced then
+			return nil
+		end
+		replaced = true
+		return "*" .. var .. "++"
+	end, 1)
+	return replaced and updated or nil
+end
+
+local function containing_while_row(node, row)
+	local result = nil
+
+	local function visit(child)
+		local start_row, _, end_row = child:range()
+		if row < start_row or row > end_row then
+			return
+		end
+
+		if child:type() == "while_statement" and row > start_row then
+			result = start_row
+		end
+		for grandchild in child:iter_children() do
+			if grandchild:named() then
+				visit(grandchild)
+			end
+		end
+	end
+
+	visit(node)
+	return result
+end
+
 local function find_while_increment_hints(bufnr, node)
 	local body_start, body_end = function_body_range(node)
 	if not body_start then
@@ -157,29 +233,101 @@ local function find_while_increment_hints(bufnr, node)
 	local hints = {}
 	local lines = vim.api.nvim_buf_get_lines(bufnr, body_start + 1, body_end, false)
 	for i, line in ipairs(lines) do
-		local var = line:match("^%s*([%a_][%w_]*)%+%+;%s*$")
-			or line:match("^%s*%+%+([%a_][%w_]*);%s*$")
-			or line:match("^%s*([%a_][%w_]*)%-%-;%s*$")
-			or line:match("^%s*%-%-([%a_][%w_]*);%s*$")
+		local var, col, end_col = increment_match(line)
 
 		if var then
 			local row = body_start + i
-			for previous = row - 1, body_start + 1, -1 do
-				if
-					(vim.api.nvim_buf_get_lines(bufnr, previous, previous + 1, false)[1] or ""):match("^%s*while%s*%(")
-				then
-					table.insert(hints, {
-						lnum = previous,
-						text = "Loop counter `"
-							.. var
-							.. "` is changed inside this while; check whether a comma/post-inc condition can save a line without changing final state.",
-					})
-					break
-				end
+			local while_row = containing_while_row(node, row)
+			if while_row then
+				table.insert(hints, {
+					lnum = row,
+					col = col,
+					end_col = end_col,
+					var = var,
+					while_lnum = while_row,
+					text = "Loop counter `"
+						.. var
+						.. "` is changed inside this while; check whether a comma/post-inc condition can save a line without changing final state.",
+				})
 			end
 		end
 	end
 	return hints
+end
+
+local function previous_expression_increment_fix(lines, hint)
+	local increment = lines[hint.lnum + 1] or ""
+	local previous = lines[hint.lnum] or ""
+	local increment_indent = increment:match("^(%s*)")
+	local previous_indent = previous:match("^(%s*)")
+
+	if increment_indent ~= previous_indent or not previous:match(";%s*$") then
+		return nil
+	end
+	if not previous:match("^%s*[%a_][%w_]*%s*=") then
+		return nil
+	end
+	if deref_count(previous, hint.var) ~= 1 then
+		return nil
+	end
+
+	local replacement = replace_first_deref(previous, hint.var)
+	if not replacement or #replacement > max_width() then
+		return nil
+	end
+	return {
+		row = hint.lnum,
+		replacement_row = hint.lnum - 1,
+		replacement = replacement,
+	}
+end
+
+local function previous_if_increment_fix(lines, hint)
+	local increment = lines[hint.lnum + 1] or ""
+	local body = lines[hint.lnum] or ""
+	local if_line = lines[hint.lnum - 1] or ""
+	local increment_indent = increment:match("^(%s*)")
+	local body_indent = body:match("^(%s*)")
+	local if_indent = if_line:match("^(%s*)")
+
+	if if_indent ~= increment_indent or #body_indent <= #if_indent then
+		return nil
+	end
+	if not body:match(";%s*$") or body:match(identifier_pattern(hint.var)) then
+		return nil
+	end
+	if not if_line:match("^%s*if%s*%(") or deref_count(if_line, hint.var) ~= 1 then
+		return nil
+	end
+
+	local replacement = replace_first_deref(if_line, hint.var)
+	if not replacement or #replacement > max_width() then
+		return nil
+	end
+	return {
+		row = hint.lnum,
+		replacement_row = hint.lnum - 2,
+		replacement = replacement,
+	}
+end
+
+local function while_increment_fix(lines, hint)
+	return previous_expression_increment_fix(lines, hint) or previous_if_increment_fix(lines, hint)
+end
+
+local function find_while_increment_fixes(bufnr, node)
+	local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+	local fixes = {}
+
+	for _, hint in ipairs(find_while_increment_hints(bufnr, node)) do
+		local fix = while_increment_fix(lines, hint)
+		if fix then
+			fix.col = hint.col
+			fix.end_col = hint.end_col
+			table.insert(fixes, fix)
+		end
+	end
+	return fixes
 end
 
 function M.remove_blank_lines(bufnr, opts)
@@ -215,8 +363,36 @@ function M.combine_expression_return(bufnr, opts)
 	return true
 end
 
+function M.apply_while_increment(bufnr, opts)
+	if not valid_buf(bufnr) then
+		return false
+	end
+
+	local node = target_function(bufnr, opts)
+	local fixes = find_while_increment_fixes(bufnr, node)
+	if #fixes == 0 then
+		return false
+	end
+
+	local target = fixes[1]
+	if opts and opts.row then
+		for _, fix in ipairs(fixes) do
+			if fix.row == opts.row then
+				target = fix
+				break
+			end
+		end
+	end
+
+	vim.api.nvim_buf_set_lines(bufnr, target.replacement_row, target.replacement_row + 1, false, { target.replacement })
+	vim.api.nvim_buf_set_lines(bufnr, target.row, target.row + 1, false, {})
+	return true
+end
+
 function M.apply_first(bufnr, opts)
-	return M.remove_blank_lines(bufnr, opts) or M.combine_expression_return(bufnr, opts)
+	return M.remove_blank_lines(bufnr, opts)
+		or M.combine_expression_return(bufnr, opts)
+		or M.apply_while_increment(bufnr, opts)
 end
 
 function M.suggestions(bufnr, opts)
@@ -249,6 +425,11 @@ function M.suggestions(bufnr, opts)
 	end
 
 	for _, hint in ipairs(find_while_increment_hints(bufnr, node)) do
+		local line = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+		local fix = while_increment_fix(line, hint)
+		if fix then
+			hint.text = "Move this loop increment into the nearby expression."
+		end
 		table.insert(suggestions, hint)
 	end
 
@@ -287,15 +468,23 @@ function M.diagnostics(bufnr, node)
 		})
 	end
 
+	local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
 	for _, hint in ipairs(find_while_increment_hints(bufnr, node)) do
+		local fix = while_increment_fix(lines, hint)
 		table.insert(diagnostics, {
 			lnum = hint.lnum,
-			col = 0,
-			code = "LINE_SAVER_WHILE_HINT",
-			message = "Line saver: " .. hint.text,
+			col = hint.col,
+			end_col = hint.end_col,
+			code = fix and "LINE_SAVER_WHILE_FIX" or "LINE_SAVER_WHILE_HINT",
+			message = fix and "Line saver: move this loop increment into the nearby expression."
+				or "Line saver: " .. hint.text,
 		})
 	end
 
+	utils.log("linesavers", "diagnostics", {
+		bufnr = bufnr,
+		count = #diagnostics,
+	})
 	return diagnostics
 end
 
@@ -331,6 +520,16 @@ function M.available_actions(bufnr, opts)
 		})
 	end
 
+	local while_fixes = find_while_increment_fixes(bufnr, node)
+	if #while_fixes > 0 then
+		first_row = first_row or while_fixes[1].row
+		table.insert(actions, {
+			key = "apply_while_increment",
+			row = while_fixes[1].row,
+			col = while_fixes[1].col,
+		})
+	end
+
 	if first_row then
 		table.insert(actions, {
 			key = "apply_line_saver",
@@ -344,10 +543,16 @@ function M.available_actions(bufnr, opts)
 		table.insert(actions, {
 			key = "show_line_savers",
 			row = first_row or hints[1].lnum,
-			col = 0,
+			col = first_row and 0 or hints[1].col,
 		})
 	end
 
+	utils.log("linesavers", "available_actions", {
+		bufnr = bufnr,
+		row = opts and opts.row,
+		count = #actions,
+		actions = actions,
+	})
 	return actions
 end
 
@@ -361,7 +566,7 @@ function M.show_suggestions(bufnr, opts)
 		table.insert(items, {
 			filename = filename,
 			lnum = suggestion.lnum + 1,
-			col = 1,
+			col = (suggestion.col or 0) + 1,
 			text = suggestion.text,
 		})
 	end

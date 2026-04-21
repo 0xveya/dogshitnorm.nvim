@@ -14,7 +14,7 @@ It also includes **custom built-in checks** for edge cases and subjective rules 
 * **Define Sorting**: Sorts contiguous simple `# define` blocks alphabetically with `:Definesort`, while leaving header guard defines alone.
 * **Header Prototype Sorting**: Sorts contiguous single-line function prototype blocks alphabetically with `:Protosort`, or automatically before saving when enabled.
 * **Function Line Counts**: Built-in Tree-sitter line count overlays for `.c` functions, based on the old `ft_count_lines.nvim` behavior.
-* **Line-Saving Actions**: Functions get low-severity diagnostic hints with code actions for removable extra blank lines and `expr; return (value);` -> `return (expr, value);`. The norm-required blank line between declarations and code is kept. Riskier while-counter tricks are listed as suggestions instead of being applied blindly.
+* **Line-Saving Actions**: Functions get low-severity diagnostic hints with code actions for removable extra blank lines, `expr; return (value);` -> `return (expr, value);`, and conservative while-counter increment rewrites. The norm-required blank line between declarations and code is kept. Riskier while-counter tricks are listed as suggestions instead of being applied blindly.
 * **LSP Quick Fixes**: Safe fixes are exposed through Neovim's LSP code-action UI, plus `:NormFix` and `:NormFixAll`. This includes header guards, include/define/prototype sorting, Makefile source sync, whitespace cleanup, missing `void` parameters, missing return parentheses, missing blank lines between functions, and overlong-function line savers.
 * **Tree-sitter Extended Checks**: Strict syntax-tree checks for rules `norminette` misses:
     * **Type Naming**: Enforces `s_`, `t_`, `u_`, and `e_` prefixes.
@@ -83,7 +83,7 @@ Using [lazy.nvim]():
 * **Define Sorting**: Run `:Definesort` inside a `.c` or `.h` file to sort contiguous simple define blocks. Set `auto_sort_defines = true` to run this automatically before saving C and header files.
 * **Prototype Sorting**: Run `:Protosort` inside a `.h` file to sort contiguous function prototype blocks. Set `auto_sort_prototypes = true` to run this automatically before saving headers.
 * **Line Counts**: Run `:NormLineCounts` or press `line_count_keybinding` to toggle virtual line count overlays above `.c` functions.
-* **Line Savers**: Run `:NormLineSavers` or use LSP code actions inside a `.c` function. Safe actions can remove extra blank lines inside the current function or combine an expression directly followed by a return with the comma operator. The required declaration/code separator blank line is not offered as removable. The suggestion list also points out while-loop counter patterns that may be worth rewriting manually.
+* **Line Savers**: Run `:NormLineSavers` or use LSP code actions inside a `.c` function. Safe actions can remove extra blank lines inside the current function, combine an expression directly followed by a return with the comma operator, or move simple `s++`/`s--` loop increments into a nearby `*s` expression. The required declaration/code separator blank line is not offered as removable. The suggestion list also points out while-loop counter patterns that may be worth rewriting manually.
 * **Quick Fixes**: Use Neovim's `vim.lsp.buf.code_action()` (`gra` by default on current Neovim) on a diagnostic line, run `:NormFix`, or run `:NormFixAll` to repair safe file-level issues such as header guards, include/define/prototype order, Makefile sources, whitespace, return parentheses, missing `void`, function spacing, overlong-function line savers, and snake_case naming.
 * **Auto-Makefile**: Creating a new `Makefile` will trigger the 42 Header and append a project stub.
 * **Source Sync**: Press `<leader>cu` (or run `:Makesync`) inside a Makefile. The plugin will read your `SRC_DIR` variable, crawl that folder for `.c` files, update your `SRCS` block with proper 42-style formatting and backslashes, and write the Makefile.
@@ -107,6 +107,8 @@ Using [lazy.nvim]():
 | `line_saver_diagnostics` | `boolean` | `true` | Emit hint diagnostics for safe line-saving opportunities. |
 | `line_saver_always` | `boolean` | `true` | Emit line-saver hint diagnostics even before a function exceeds the line limit. |
 | `line_saver_max_width` | `number` | `80` | Maximum generated line width for comma-expression return fixes. |
+| `debug_log` | `boolean` | `false` | Write dogshitnorm troubleshooting logs when enabled. |
+| `debug_log_path` | `string` | `nil` | Log file path. Defaults to `stdpath("cache") .. "/dogshitnorm.log"`. |
 | `auto_makefile` | `boolean` | `true` | Auto-populate new Makefiles. |
 | `auto_sync_makefile` | `boolean` | `true` | Enable the `:Makesync` command. |
 | `keybinding` | `string` | `"<leader>cn"` | Keymap to trigger linting. |

@@ -66,4 +66,33 @@ function M.get_src_dir(makefile_path, default_src_dir)
 	return default_src_dir
 end
 
+local function log_path(cfg)
+	local path = cfg.debug_log_path
+	if type(path) ~= "string" or path == "" then
+		path = vim.fn.stdpath("cache") .. "/dogshitnorm.log"
+	end
+	return vim.fn.expand(path)
+end
+
+function M.log(scope, message, data)
+	local ok, config = pcall(require, "dogshitnorm.config")
+	if not ok then
+		return
+	end
+
+	local cfg = config.get()
+	if not cfg.debug_log then
+		return
+	end
+
+	local path = log_path(cfg)
+	local line = os.date("%Y-%m-%d %H:%M:%S") .. "\t" .. tostring(scope) .. "\t" .. tostring(message)
+	if data ~= nil then
+		line = line .. "\t" .. vim.inspect(data):gsub("\n", " ")
+	end
+
+	vim.fn.mkdir(vim.fn.fnamemodify(path, ":h"), "p")
+	pcall(vim.fn.writefile, { line }, path, "a")
+end
+
 return M

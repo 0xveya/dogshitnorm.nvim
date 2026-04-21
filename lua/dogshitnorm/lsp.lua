@@ -22,6 +22,7 @@ local diagnostic_fix_keys = {
 	TOO_MANY_LINES = "apply_line_saver",
 	LINE_SAVER_BLANK = "remove_function_blank_lines",
 	LINE_SAVER_COMMA_RETURN = "combine_expression_return",
+	LINE_SAVER_WHILE_FIX = "apply_while_increment",
 	LINE_SAVER_WHILE_HINT = "show_line_savers",
 	MAKEFILE_WILDCARD = "sync_makefile_sources",
 }
@@ -77,10 +78,11 @@ local function make_command_action(title, kind, command, arguments, row, col)
 end
 
 local function add_fix_action(actions, seen, key, row, col, uri)
-	if seen[key] then
+	local seen_key = "quickfix:" .. key
+	if seen[seen_key] then
 		return
 	end
-	seen[key] = true
+	seen[seen_key] = true
 
 	local titles = {
 		fix_header_guard = "dogshitnorm: Fix header guard",
@@ -93,6 +95,7 @@ local function add_fix_action(actions, seen, key, row, col, uri)
 		fix_function_spacing = "dogshitnorm: Insert empty line before function",
 		remove_function_blank_lines = "dogshitnorm: Remove blank lines in function",
 		combine_expression_return = "dogshitnorm: Combine expression with return",
+		apply_while_increment = "dogshitnorm: Move loop increment into expression",
 		apply_line_saver = "dogshitnorm: Apply first safe line saver",
 		show_line_savers = "dogshitnorm: Show line-saving suggestions",
 		sync_makefile_sources = "dogshitnorm: Sync Makefile sources",
@@ -111,13 +114,14 @@ local function add_fix_action(actions, seen, key, row, col, uri)
 end
 
 local function add_source_action(actions, seen, filename, key, title, kind, applies, uri)
-	if seen[key] then
+	local seen_key = "source:" .. key
+	if seen[seen_key] then
 		return
 	end
 	if applies and not applies(filename) then
 		return
 	end
-	seen[key] = true
+	seen[seen_key] = true
 	table.insert(actions, make_command_action(title, kind, "dogshitnorm.applyFix", { { key = key, uri = uri } }))
 end
 
@@ -127,9 +131,16 @@ local function add_line_saver_actions(bufnr, actions, seen, row, uri)
 		return
 	end
 
+	local added = 0
 	for _, action in ipairs(linesavers.available_actions(bufnr, { row = row })) do
+		added = added + 1
 		add_fix_action(actions, seen, action.key, action.row, action.col, uri)
 	end
+	utils.log("lsp", "line_saver_actions", {
+		filename = filename,
+		row = row,
+		candidates = added,
+	})
 end
 
 local function add_rename_action(bufnr, actions, seen, diagnostic)
@@ -165,6 +176,21 @@ local function add_rename_action(bufnr, actions, seen, diagnostic)
 			identifier.start_col
 		)
 	)
+end
+
+local function quickfixes_first(actions)
+	local ordered = {}
+	for _, action in ipairs(actions) do
+		if action.kind == "quickfix" then
+			table.insert(ordered, action)
+		end
+	end
+	for _, action in ipairs(actions) do
+		if action.kind ~= "quickfix" then
+			table.insert(ordered, action)
+		end
+	end
+	return ordered
 end
 
 local function code_actions(params)
@@ -273,7 +299,22 @@ local function code_actions(params)
 	if start_line then
 		add_line_saver_actions(bufnr, actions, seen, start_line, uri)
 	end
+	actions = quickfixes_first(actions)
 
+	local titles = {}
+	for _, action in ipairs(actions) do
+		table.insert(titles, {
+			title = action.title,
+			kind = action.kind,
+		})
+	end
+	utils.log("lsp", "code_actions", {
+		filename = filename,
+		start_line = start_line,
+		only = context.only,
+		diagnostic_count = #diagnostics,
+		actions = titles,
+	})
 	return actions
 end
 

@@ -88,8 +88,8 @@ local function add_diagnostic(diagnostics, bufnr, node, code, message, severity)
 	})
 end
 
-local function add_line_diagnostic(diagnostics, bufnr, lnum, col, code, message, severity)
-	table.insert(diagnostics, {
+local function add_line_diagnostic(diagnostics, bufnr, lnum, col, code, message, severity, opts)
+	local diagnostic = {
 		bufnr = bufnr,
 		lnum = lnum,
 		col = col,
@@ -97,7 +97,12 @@ local function add_line_diagnostic(diagnostics, bufnr, lnum, col, code, message,
 		source = C_SOURCE,
 		code = code,
 		message = message,
-	})
+	}
+	if opts then
+		diagnostic.end_lnum = opts.end_lnum
+		diagnostic.end_col = opts.end_col
+	end
+	table.insert(diagnostics, diagnostic)
 end
 
 local function walk(node, ancestors, callback)
@@ -444,7 +449,11 @@ local function add_line_saver_diagnostics(bufnr, diagnostics, node)
 			diagnostic.col,
 			diagnostic.code,
 			diagnostic.message,
-			vim.diagnostic.severity.HINT
+			vim.diagnostic.severity.HINT,
+			{
+				end_lnum = diagnostic.end_lnum,
+				end_col = diagnostic.end_col,
+			}
 		)
 	end
 end
