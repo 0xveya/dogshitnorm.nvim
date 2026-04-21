@@ -21,7 +21,10 @@ function M.is_in_active_dir(filepath, active_dirs)
 end
 
 function M.find_project_root(filepath)
-	local current = vim.fn.fnamemodify(filepath, ":h")
+	local current = filepath
+	if vim.fn.isdirectory(current) == 0 then
+		current = vim.fn.fnamemodify(filepath, ":h")
+	end
 	while current ~= "/" and current ~= "" do
 		if vim.fn.filereadable(current .. "/Makefile") == 1 then
 			return current

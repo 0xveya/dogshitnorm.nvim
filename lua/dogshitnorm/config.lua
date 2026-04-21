@@ -12,6 +12,7 @@ M.defaults = {
 	makesync_keybinding = "<leader>cu",
 	auto_makefile = true,
 	auto_header_guard = true,
+	auto_sort_prototypes = false,
 	guard_keybinding = "<leader>ch",
 	makefile_keybinding = "<leader>cm",
 	src_dir = "src",

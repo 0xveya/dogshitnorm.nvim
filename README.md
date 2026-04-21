@@ -10,6 +10,7 @@ It also includes **custom built-in checks** for edge cases and subjective rules 
 * **Smart Header Guard Generator**: Automatically inserts C-style `#ifndef` guards in new `.h` files. It intelligently waits for the 42 Header to be inserted first, ensures clean spacing, and keeps you in Normal mode.
 * **Makefile Boilerplate**: Instantly populates new `Makefile`s with 42-compliant mandatory rules (`all`, `clean`, `fclean`, `re`) and a standard project structure.
 * **Smart Source Sync**: Automatically detects your `SRC_DIR` from the Makefile and syncs your `SRCS` list with all `.c` files found in that directory (recursive). No more manual typing of every new file.
+* **Header Prototype Sorting**: Sorts contiguous single-line function prototype blocks alphabetically with `:Protosort`, or automatically before saving when enabled.
 * **Extended Manual Checks**: Strict Lua-based checks for rules `norminette` misses:
 * **Type Naming**: Enforces `s_`, `t_`, `u_`, and `e_` prefixes.
 * **42 Header Validation**: Ensures a valid header with student email and dates.
@@ -43,6 +44,7 @@ Using [lazy.nvim]():
         -- Header Guard settings
         auto_header_guard = true,
         guard_keybinding = "<leader>ch",
+        auto_sort_prototypes = false,
 
         -- Makefile settings
         auto_makefile = true,
@@ -65,6 +67,7 @@ Using [lazy.nvim]():
 
 * **Linting**: Save your file (`:w`) or press `<leader>cn`.
 * **Auto-Guards**: Creating a new `.h` file inside an active directory will automatically trigger the 42 Header and append inclusion guards.
+* **Prototype Sorting**: Run `:Protosort` inside a `.h` file to sort contiguous function prototype blocks. Set `auto_sort_prototypes = true` to run this automatically before saving headers.
 * **Auto-Makefile**: Creating a new `Makefile` will trigger the 42 Header and append a project stub.
 * **Source Sync**: Press `<leader>cu` (or run `:Makesync`) inside a Makefile. The plugin will read your `SRC_DIR` variable, crawl that folder for `.c` files, and update your `SRCS` block with proper 42-style formatting and backslashes.
 
@@ -74,6 +77,7 @@ Using [lazy.nvim]():
 | --- | --- | --- | --- |
 | `cmd` | `table` | `{"norminette"}` | The command to execute. |
 | `auto_header_guard` | `boolean` | `true` | Auto-insert guards in `.h` files. |
+| `auto_sort_prototypes` | `boolean` | `false` | Auto-sort contiguous function prototype blocks before saving `.h` files. |
 | `auto_makefile` | `boolean` | `true` | Auto-populate new Makefiles. |
 | `auto_sync_makefile` | `boolean` | `true` | Enable the `:Makesync` command. |
 | `keybinding` | `string` | `"<leader>cn"` | Keymap to trigger linting. |

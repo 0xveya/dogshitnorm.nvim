@@ -8,6 +8,23 @@ local M = {}
 
 M.lint = lint.lint
 
+local function normalize_path(path)
+	return vim.fn.fnamemodify(path, ":p"):gsub("/+$", "")
+end
+
+local function is_in_makefile_src(filepath, cfg)
+	local project_root = utils.find_project_root(filepath)
+	if not project_root then
+		return false
+	end
+
+	local src_dir = utils.get_src_dir(project_root .. "/Makefile", cfg.src_dir)
+	local source_root = normalize_path(project_root .. "/" .. src_dir)
+	local target = normalize_path(filepath)
+
+	return target == source_root or vim.startswith(target, source_root .. "/")
+end
+
 function M.setup(opts)
 	local cfg = config.setup(opts)
 
@@ -23,7 +40,7 @@ function M.setup(opts)
 				if filepath:match("oil://") then
 					return
 				end
-				if filepath:match("/" .. cfg.src_dir .. "/") then
+				if is_in_makefile_src(filepath, cfg) then
 					vim.schedule(function()
 						makefile.background_sync(filepath)
 					end)
@@ -45,7 +62,7 @@ function M.setup(opts)
 					return
 				end
 
-				if dir:match("/" .. cfg.src_dir .. "/") or dir:match("/" .. cfg.src_dir .. "$") then
+				if is_in_makefile_src(dir, cfg) then
 					vim.schedule(function()
 						makefile.background_sync(dir)
 					end)
@@ -94,12 +111,26 @@ function M.setup(opts)
 		})
 	end
 
-	-- 4. User Commands
+	-- 4. Header Prototype Sorting
+	if cfg.auto_sort_prototypes then
+		vim.api.nvim_create_autocmd("BufWritePre", {
+			pattern = "*.h",
+			group = vim.api.nvim_create_augroup("NorminetteProtoSort", { clear = true }),
+			callback = function(args)
+				header.sort_prototypes(args.buf)
+			end,
+		})
+	end
+
+	-- 5. User Commands
 	vim.api.nvim_create_user_command("Makegen", makefile.generate, {})
 	vim.api.nvim_create_user_command("Makesync", makefile.update_sources, {})
+	vim.api.nvim_create_user_command("Protosort", function()
+		header.sort_prototypes(vim.api.nvim_get_current_buf())
+	end, {})
 	vim.api.nvim_create_user_command("Norminette", M.lint, {})
 
-	-- 5. Keymaps
+	-- 6. Keymaps
 	if cfg.makefile_keybinding then
 		vim.keymap.set("n", cfg.makefile_keybinding, ":Makegen<CR>", { silent = true, desc = "Generate Makefile" })
 	end
@@ -115,7 +146,7 @@ function M.setup(opts)
 		vim.keymap.set("n", cfg.keybinding, M.lint, { desc = "Lint with Norminette" })
 	end
 
-	-- 6. Linting on Save
+	-- 7. Linting on Save
 	if cfg.lint_on_save then
 		vim.api.nvim_create_autocmd("BufWritePost", {
 			pattern = cfg.pattern,
