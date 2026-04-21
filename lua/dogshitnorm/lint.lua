@@ -193,6 +193,11 @@ function M.lint()
 		return
 	end
 
+	-- Publish tree-sitter diagnostics immediately so line-saver hints are
+	-- visible right away, without waiting for the async norminette process.
+	-- The norminette callback will replace these with the merged set once done.
+	vim.diagnostic.set(utils.ns_id, bufnr, manual_diagnostics)
+
 	local command = vim.deepcopy(cfg.cmd)
 	if type(command) == "string" then
 		command = { command }

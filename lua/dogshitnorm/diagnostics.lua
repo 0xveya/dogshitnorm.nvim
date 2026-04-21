@@ -459,7 +459,8 @@ local function check_function_definition(bufnr, diagnostics, node)
 	if body then
 		local start_row, _, end_row = body:range()
 		local function_lines = math.max(0, end_row - start_row - 1)
-		if function_lines > 25 then
+		local line_limit = config.get().line_count_limit or 25
+		if function_lines > line_limit then
 			add_diagnostic(
 				diagnostics,
 				bufnr,
@@ -467,6 +468,12 @@ local function check_function_definition(bufnr, diagnostics, node)
 				"FUNC_TOO_LONG",
 				"Each function must be at most 25 lines long, not counting its own braces."
 			)
+			add_line_saver_diagnostics(bufnr, diagnostics, node)
+		elseif function_lines == line_limit then
+			-- Function is exactly at the limit: blank lines and other cheap
+			-- savings exist but haven't pushed it over yet.  Emit hints so the
+			-- formatter-added empty lines are surfaced before the next edit
+			-- tips the function over the edge.
 			add_line_saver_diagnostics(bufnr, diagnostics, node)
 		end
 
