@@ -95,16 +95,53 @@ local function find_comma_return(bufnr, node)
 	return nil
 end
 
+-- Returns the 0-indexed row of the single blank line the norm (§III.2)
+-- requires between the variable-declaration block and the first statement,
+-- or nil when there are no declarations (no separator is needed).
+local function required_blank_row(bufnr, node)
+	local body = node and node:field("body")[1]
+	if not body then
+		return nil
+	end
+
+	local last_decl_end = nil
+	for child in body:iter_children() do
+		if child:named() then
+			if child:type() == "declaration" then
+				local _, _, end_row = child:range()
+				last_decl_end = end_row
+			elseif child:type() ~= "comment" then
+				break
+			end
+		end
+	end
+
+	if not last_decl_end then
+		return nil
+	end
+
+	local _, _, body_end = body:range()
+	local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+	local candidate = last_decl_end + 1
+	if candidate < body_end and (lines[candidate + 1] or ""):match("^%s*$") then
+		return candidate
+	end
+	return nil
+end
+
 local function find_blank_lines(bufnr, node)
 	local body_start, body_end = function_body_range(node)
 	if not body_start then
 		return {}
 	end
 
+	-- §III.2 permits exactly one blank line – between declarations and code.
+	-- Skip that row so it is never suggested for removal.
+	local required = required_blank_row(bufnr, node)
 	local blank_rows = {}
 	local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
 	for row = body_start + 1, body_end - 1 do
-		if (lines[row + 1] or ""):match("^%s*$") then
+		if row ~= required and (lines[row + 1] or ""):match("^%s*$") then
 			table.insert(blank_rows, row)
 		end
 	end
