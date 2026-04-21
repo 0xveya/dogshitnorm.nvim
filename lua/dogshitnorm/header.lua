@@ -51,19 +51,6 @@ local function is_prototype(line)
 	return get_prototype_name(trimmed) ~= nil
 end
 
-local function find_descendant(node, node_type)
-	if node:type() == node_type then
-		return node
-	end
-	for child in node:iter_children() do
-		local found = find_descendant(child, node_type)
-		if found then
-			return found
-		end
-	end
-	return nil
-end
-
 local function unwrap_identifier(node)
 	if not node then
 		return nil
@@ -79,8 +66,24 @@ local function unwrap_identifier(node)
 	return nil
 end
 
+local function unwrap_function_declarator(node)
+	if not node then
+		return nil
+	end
+	if node:type() == "function_declarator" then
+		return node
+	end
+
+	local declarator = node:field("declarator")[1]
+	if declarator then
+		return unwrap_function_declarator(declarator)
+	end
+	return nil
+end
+
 local function get_tree_sitter_prototype_name(bufnr, node, line)
-	local function_declarator = find_descendant(node, "function_declarator")
+	local declaration_declarator = node:field("declarator")[1]
+	local function_declarator = unwrap_function_declarator(declaration_declarator)
 	if not function_declarator then
 		return nil
 	end
@@ -94,7 +97,7 @@ local function get_tree_sitter_prototype_name(bufnr, node, line)
 	if not trimmed or trimmed:match("^typedef%s+") then
 		return nil
 	end
-	if trimmed:match("%(%s*%*") or not trimmed:match(";%s*$") then
+	if not trimmed:match(";%s*$") then
 		return nil
 	end
 

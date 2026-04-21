@@ -9,6 +9,11 @@ local function is_excluded_source(project_root, filepath, exclude_dirs)
 		return false
 	end
 
+	for segment in rel:gmatch("[^/]+") do
+		if segment:lower():find("tester", 1, true) then
+			return true
+		end
+	end
 	for _, dir in ipairs(exclude_dirs or {}) do
 		dir = dir:gsub("^/+", ""):gsub("/+$", "")
 		if rel == dir or vim.startswith(rel, dir .. "/") or rel:find("/" .. dir .. "/", 1, true) then

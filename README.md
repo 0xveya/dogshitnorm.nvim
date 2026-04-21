@@ -97,7 +97,7 @@ Using [lazy.nvim]():
 | `guard_keybinding` | `string` | `"<leader>ch"` | Keymap to trigger header guard. |
 | `makefile_keybinding` | `string` | `"<leader>cm"` | Keymap to trigger Makefile stub. |
 | `makesync_keybinding` | `string` | `"<leader>cu"` | Keymap to sync SRCS with SRC_DIR. |
-| `makefile_exclude_dirs` | `table` | `{".git",".jj","libftTester","tests","test","build"}` | Directories ignored when syncing Makefile sources. |
+| `makefile_exclude_dirs` | `table` | `{".git",".jj","tests","test","build"}` | Directories ignored when syncing Makefile sources. Any path segment containing `tester` is also ignored. |
 | `active_dirs` | `table` | `nil` | List of allowed project paths. |
 
 ## Requirements
