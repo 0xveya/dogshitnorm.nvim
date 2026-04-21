@@ -17,6 +17,8 @@ local diagnostic_fix_keys = {
 	NO_ARGS_VOID = "fix_void_parameter",
 	FUNC_SPACING = "fix_function_spacing",
 	NEWLINE_PRECEDES_FUNC = "fix_function_spacing",
+	FUNC_TOO_LONG = "apply_line_saver",
+	TOO_MANY_LINES = "apply_line_saver",
 	MAKEFILE_WILDCARD = "sync_makefile_sources",
 }
 
@@ -85,6 +87,10 @@ local function add_fix_action(actions, seen, key, row, col)
 		fix_return_parentheses = "dogshitnorm: Wrap return value in parentheses",
 		fix_void_parameter = "dogshitnorm: Use void for empty parameter list",
 		fix_function_spacing = "dogshitnorm: Insert empty line before function",
+		remove_function_blank_lines = "dogshitnorm: Remove blank lines in function",
+		combine_expression_return = "dogshitnorm: Combine expression with return",
+		apply_line_saver = "dogshitnorm: Apply first safe line saver",
+		show_line_savers = "dogshitnorm: Show line-saving suggestions",
 		sync_makefile_sources = "dogshitnorm: Sync Makefile sources",
 	}
 	table.insert(
@@ -217,6 +223,14 @@ local function code_actions(params)
 				return name:match("%.c$") ~= nil or name:match("[Mm]akefile$") ~= nil
 			end,
 		},
+		{
+			key = "show_line_savers",
+			title = "dogshitnorm: Show line-saving suggestions",
+			kind = "source.dogshitnorm.lineSavers",
+			applies = function(name)
+				return name:match("%.c$") ~= nil
+			end,
+		},
 	}) do
 		if wants_kind(context, action.kind) then
 			add_source_action(actions, seen, filename, action.key, action.title, action.kind, action.applies)
@@ -233,6 +247,11 @@ local function code_actions(params)
 		local key = diagnostic_fix_keys[diagnostic.code]
 		if key then
 			add_fix_action(actions, seen, key, diagnostic.lnum, diagnostic.col)
+		end
+		if diagnostic.code == "FUNC_TOO_LONG" or diagnostic.code == "TOO_MANY_LINES" then
+			add_fix_action(actions, seen, "remove_function_blank_lines", diagnostic.lnum, diagnostic.col)
+			add_fix_action(actions, seen, "combine_expression_return", diagnostic.lnum, diagnostic.col)
+			add_fix_action(actions, seen, "show_line_savers", diagnostic.lnum, diagnostic.col)
 		end
 		add_rename_action(bufnr, actions, seen, diagnostic)
 	end
@@ -253,6 +272,7 @@ local methods = {
 						"source.dogshitnorm.sortDefines",
 						"source.dogshitnorm.sortPrototypes",
 						"source.dogshitnorm.syncMakefile",
+						"source.dogshitnorm.lineSavers",
 					},
 				},
 				executeCommandProvider = {

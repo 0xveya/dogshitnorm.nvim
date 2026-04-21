@@ -3,6 +3,8 @@ local lint = require("dogshitnorm.lint")
 local makefile = require("dogshitnorm.makefile")
 local header = require("dogshitnorm.header")
 local fixes = require("dogshitnorm.fixes")
+local linecount = require("dogshitnorm.linecount")
+local linesavers = require("dogshitnorm.linesavers")
 local lsp = require("dogshitnorm.lsp")
 local utils = require("dogshitnorm.utils")
 
@@ -11,6 +13,8 @@ local M = {}
 M.lint = lint.lint
 M.fix = fixes.fix
 M.fix_all = fixes.fix_all
+M.toggle_line_counts = linecount.toggle
+M.show_line_savers = linesavers.show_suggestions
 
 local function is_in_makefile_src(filepath, cfg)
 	local project_root = utils.find_project_root(filepath)
@@ -151,7 +155,12 @@ function M.setup(opts)
 		})
 	end
 
-	-- 6. LSP Code Actions
+	-- 6. Function Line Counts
+	if cfg.line_count_enabled then
+		linecount.enable()
+	end
+
+	-- 7. LSP Code Actions
 	if cfg.lsp_code_actions then
 		vim.api.nvim_create_autocmd({ "BufReadPost", "BufNewFile" }, {
 			pattern = { "*.c", "*.h", "Makefile", "makefile" },
@@ -166,7 +175,7 @@ function M.setup(opts)
 		end
 	end
 
-	-- 7. User Commands
+	-- 8. User Commands
 	vim.api.nvim_create_user_command("Makegen", makefile.generate, {})
 	vim.api.nvim_create_user_command("Makesync", function()
 		makefile.sync()
@@ -186,9 +195,13 @@ function M.setup(opts)
 	vim.api.nvim_create_user_command("NormFixAll", function()
 		fixes.fix_all(vim.api.nvim_get_current_buf())
 	end, {})
+	vim.api.nvim_create_user_command("NormLineCounts", linecount.toggle, {})
+	vim.api.nvim_create_user_command("NormLineSavers", function()
+		linesavers.show_suggestions(vim.api.nvim_get_current_buf())
+	end, {})
 	vim.api.nvim_create_user_command("Norminette", M.lint, {})
 
-	-- 8. Keymaps
+	-- 9. Keymaps
 	if cfg.makefile_keybinding then
 		vim.keymap.set("n", cfg.makefile_keybinding, ":Makegen<CR>", { silent = true, desc = "Generate Makefile" })
 	end
@@ -206,8 +219,11 @@ function M.setup(opts)
 	if cfg.fix_keybinding then
 		vim.keymap.set("n", cfg.fix_keybinding, M.fix, { desc = "Apply dogshitnorm fix" })
 	end
+	if cfg.line_count_keybinding then
+		vim.keymap.set("n", cfg.line_count_keybinding, linecount.toggle, { desc = "Toggle dogshitnorm line counts" })
+	end
 
-	-- 9. Linting on Save
+	-- 10. Linting on Save
 	if cfg.lint_on_save then
 		vim.api.nvim_create_autocmd("BufWritePost", {
 			pattern = cfg.pattern,

@@ -16,6 +16,7 @@ local duplicate_codes = {
 	GLOBAL_NAME = { GLOBAL_VAR_NAMING = true },
 	GLOBAL_MUTABLE = { GLOBAL_VAR_DETECTED = true },
 	TOO_MANY_PARAMS = { TOO_MANY_ARGS = true },
+	FUNC_TOO_LONG = { TOO_MANY_LINES = true, TOO_MANY_LINES_FUNC = true },
 	TOO_MANY_FUNCS = { TOO_MANY_FUNCS = true },
 	TOO_MANY_VARS = { TOO_MANY_VARS_FUNC = true },
 	VOID_PARAM = { NO_ARGS_VOID = true },

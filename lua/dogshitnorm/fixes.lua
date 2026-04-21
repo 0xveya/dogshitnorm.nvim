@@ -1,4 +1,5 @@
 local header = require("dogshitnorm.header")
+local linesavers = require("dogshitnorm.linesavers")
 local makefile = require("dogshitnorm.makefile")
 local textfix = require("dogshitnorm.textfix")
 local utils = require("dogshitnorm.utils")
@@ -34,6 +35,8 @@ local diagnostic_actions = {
 	NO_ARGS_VOID = "fix_void_parameter",
 	FUNC_SPACING = "fix_function_spacing",
 	NEWLINE_PRECEDES_FUNC = "fix_function_spacing",
+	FUNC_TOO_LONG = "apply_line_saver",
+	TOO_MANY_LINES = "apply_line_saver",
 	MAKEFILE_WILDCARD = "sync_makefile_sources",
 }
 
@@ -92,6 +95,38 @@ local action_defs = {
 	fix_function_spacing = {
 		title = "Insert empty line before function",
 		apply = textfix.fix_function_spacing,
+		applies_to = function(filename)
+			return filename:match("%.c$") ~= nil
+		end,
+		file_action = false,
+	},
+	remove_function_blank_lines = {
+		title = "Remove blank lines in function",
+		apply = linesavers.remove_blank_lines,
+		applies_to = function(filename)
+			return filename:match("%.c$") ~= nil
+		end,
+		file_action = false,
+	},
+	combine_expression_return = {
+		title = "Combine expression with return",
+		apply = linesavers.combine_expression_return,
+		applies_to = function(filename)
+			return filename:match("%.c$") ~= nil
+		end,
+		file_action = false,
+	},
+	apply_line_saver = {
+		title = "Apply first safe line saver",
+		apply = linesavers.apply_first,
+		applies_to = function(filename)
+			return filename:match("%.c$") ~= nil
+		end,
+		file_action = false,
+	},
+	show_line_savers = {
+		title = "Show line-saving suggestions",
+		apply = linesavers.show_suggestions,
 		applies_to = function(filename)
 			return filename:match("%.c$") ~= nil
 		end,
