@@ -475,6 +475,11 @@ local function check_function_definition(bufnr, diagnostics, node)
 			-- formatter-added empty lines are surfaced before the next edit
 			-- tips the function over the edge.
 			add_line_saver_diagnostics(bufnr, diagnostics, node)
+		elseif config.get().line_saver_always ~= false then
+			-- Function is under the limit but line-saver hints are still useful
+			-- (e.g. a blank line that a formatter will add later would push it
+			-- over).  Emit them so the code-action is always available.
+			add_line_saver_diagnostics(bufnr, diagnostics, node)
 		end
 
 		local totals = { count = 0 }
