@@ -121,7 +121,7 @@ local action_defs = {
 		file_action = false,
 	},
 	apply_while_increment = {
-		title = "Move loop increment into expression",
+		title = "Fold loop increment",
 		apply = linesavers.apply_while_increment,
 		applies_to = function(filename)
 			return filename:match("%.c$") ~= nil
@@ -129,7 +129,7 @@ local action_defs = {
 		file_action = false,
 	},
 	apply_line_saver = {
-		title = "Apply first safe line saver",
+		title = "Apply first line saver",
 		apply = linesavers.apply_first,
 		applies_to = function(filename)
 			return filename:match("%.c$") ~= nil

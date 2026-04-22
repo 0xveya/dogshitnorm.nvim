@@ -95,8 +95,8 @@ local function add_fix_action(actions, seen, key, row, col, uri)
 		fix_function_spacing = "dogshitnorm: Insert empty line before function",
 		remove_function_blank_lines = "dogshitnorm: Remove blank lines in function",
 		combine_expression_return = "dogshitnorm: Combine expression with return",
-		apply_while_increment = "dogshitnorm: Move loop increment into expression",
-		apply_line_saver = "dogshitnorm: Apply first safe line saver",
+		apply_while_increment = "dogshitnorm: Fold loop increment",
+		apply_line_saver = "dogshitnorm: Apply first line saver",
 		show_line_savers = "dogshitnorm: Show line-saving suggestions",
 		sync_makefile_sources = "dogshitnorm: Sync Makefile sources",
 	}

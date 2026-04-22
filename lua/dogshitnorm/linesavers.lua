@@ -152,22 +152,22 @@ end
 local function increment_match(line)
 	local start_col, var, end_col = line:match("^%s*()([%a_][%w_]*)()%+%+;%s*$")
 	if var then
-		return var, start_col - 1, end_col - 1
+		return var, start_col - 1, end_col - 1, "++"
 	end
 
 	start_col, var, end_col = line:match("^%s*%+%+()([%a_][%w_]*)()%s*;%s*$")
 	if var then
-		return var, start_col - 1, end_col - 1
+		return var, start_col - 1, end_col - 1, "++"
 	end
 
 	start_col, var, end_col = line:match("^%s*()([%a_][%w_]*)()%-%-;%s*$")
 	if var then
-		return var, start_col - 1, end_col - 1
+		return var, start_col - 1, end_col - 1, "--"
 	end
 
 	start_col, var, end_col = line:match("^%s*%-%-()([%a_][%w_]*)()%s*;%s*$")
 	if var then
-		return var, start_col - 1, end_col - 1
+		return var, start_col - 1, end_col - 1, "--"
 	end
 
 	return nil
@@ -189,14 +189,14 @@ local function deref_count(line, var)
 	return count
 end
 
-local function replace_first_deref(line, var)
+local function replace_first_deref(line, var, op)
 	local replaced = false
 	local updated = line:gsub(deref_pattern(var), function()
 		if replaced then
 			return nil
 		end
 		replaced = true
-		return "*" .. var .. "++"
+		return "*" .. var .. (op or "++")
 	end, 1)
 	return replaced and updated or nil
 end
@@ -233,7 +233,7 @@ local function find_while_increment_hints(bufnr, node)
 	local hints = {}
 	local lines = vim.api.nvim_buf_get_lines(bufnr, body_start + 1, body_end, false)
 	for i, line in ipairs(lines) do
-		local var, col, end_col = increment_match(line)
+		local var, col, end_col, op = increment_match(line)
 
 		if var then
 			local row = body_start + i
@@ -244,6 +244,7 @@ local function find_while_increment_hints(bufnr, node)
 					col = col,
 					end_col = end_col,
 					var = var,
+					op = op,
 					while_lnum = while_row,
 					text = "Loop counter `"
 						.. var
@@ -271,7 +272,7 @@ local function previous_expression_increment_fix(lines, hint)
 		return nil
 	end
 
-	local replacement = replace_first_deref(previous, hint.var)
+	local replacement = replace_first_deref(previous, hint.var, hint.op)
 	if not replacement or #replacement > max_width() then
 		return nil
 	end
@@ -300,7 +301,7 @@ local function previous_if_increment_fix(lines, hint)
 		return nil
 	end
 
-	local replacement = replace_first_deref(if_line, hint.var)
+	local replacement = replace_first_deref(if_line, hint.var, hint.op)
 	if not replacement or #replacement > max_width() then
 		return nil
 	end
@@ -311,8 +312,43 @@ local function previous_if_increment_fix(lines, hint)
 	}
 end
 
+local function while_condition_increment_fix(lines, hint)
+	local while_line = lines[hint.while_lnum + 1] or ""
+	local increment = lines[hint.lnum + 1] or ""
+	local while_indent, condition = while_line:match("^(%s*)while%s*%((.*)%)%s*$")
+	local increment_indent = increment:match("^(%s*)")
+
+	if not while_indent or not condition or hint.lnum ~= hint.while_lnum + 1 then
+		return nil
+	end
+	if not increment_indent or #increment_indent <= #while_indent then
+		return nil
+	end
+
+	local update = hint.var .. (hint.op or "++")
+	local replacement = while_indent .. "while ((" .. condition .. ") && (" .. update .. ", 1));"
+	if #replacement > max_width() then
+		return nil
+	end
+	return {
+		row = hint.lnum,
+		replacement_row = hint.while_lnum,
+		replacement = replacement,
+		aggressive = true,
+	}
+end
+
 local function while_increment_fix(lines, hint)
-	return previous_expression_increment_fix(lines, hint) or previous_if_increment_fix(lines, hint)
+	return previous_expression_increment_fix(lines, hint)
+		or previous_if_increment_fix(lines, hint)
+		or while_condition_increment_fix(lines, hint)
+end
+
+local function while_increment_message(fix)
+	if fix.aggressive then
+		return "fold this single-line while increment into the condition."
+	end
+	return "move this loop increment into the nearby expression."
 end
 
 local function find_while_increment_fixes(bufnr, node)
@@ -428,7 +464,7 @@ function M.suggestions(bufnr, opts)
 		local line = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
 		local fix = while_increment_fix(line, hint)
 		if fix then
-			hint.text = "Move this loop increment into the nearby expression."
+			hint.text = while_increment_message(fix):gsub("^%l", string.upper)
 		end
 		table.insert(suggestions, hint)
 	end
@@ -471,13 +507,16 @@ function M.diagnostics(bufnr, node)
 	local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
 	for _, hint in ipairs(find_while_increment_hints(bufnr, node)) do
 		local fix = while_increment_fix(lines, hint)
+		local message = "Line saver: " .. hint.text
+		if fix then
+			message = "Line saver: " .. while_increment_message(fix)
+		end
 		table.insert(diagnostics, {
 			lnum = hint.lnum,
 			col = hint.col,
 			end_col = hint.end_col,
 			code = fix and "LINE_SAVER_WHILE_FIX" or "LINE_SAVER_WHILE_HINT",
-			message = fix and "Line saver: move this loop increment into the nearby expression."
-				or "Line saver: " .. hint.text,
+			message = message,
 		})
 	end
 
