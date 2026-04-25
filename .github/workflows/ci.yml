@@ -20,6 +20,7 @@ jobs:
 
       - uses: JohnnyMorganz/stylua-action@v4
         with:
+          token: ${{ secrets.GITHUB_TOKEN }}
           version: latest
           args: --check lua
 
@@ -60,4 +61,3 @@ jobs:
 
       - name: Build docs
         run: npm run build
-

@@ -258,109 +258,77 @@ local function apply_highlights(bufnr)
 
 	local kind = resolve_kind(bufnr)
 	local lines = vim.api.nvim_buf_get_lines(bufnr, 0, 11, false)
-	local left_start = kind == "make" and 2 or 3
-	local left_end = kind == "make" and 78 or 77
+	local border_width = kind == "make" and 2 or 3
 
 	vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1)
 
 	for i, line in ipairs(lines) do
 		local row = i - 1
 		local line_len = #line
+		local content_start = border_width
+		local content_end = line_len - border_width
 
-		if kind == "make" then
-			vim.api.nvim_buf_set_extmark(bufnr, ns_id, row, 0, { end_col = 2, hl_group = "DogshitnormHeaderBox" })
-			vim.api.nvim_buf_set_extmark(
-				bufnr,
-				ns_id,
-				row,
-				line_len - 2,
-				{ end_col = line_len, hl_group = "DogshitnormHeaderBox" }
-			)
-		else
-			vim.api.nvim_buf_set_extmark(bufnr, ns_id, row, 0, { end_col = 3, hl_group = "DogshitnormHeaderBox" })
-			vim.api.nvim_buf_set_extmark(
-				bufnr,
-				ns_id,
-				row,
-				line_len - 3,
-				{ end_col = line_len, hl_group = "DogshitnormHeaderBox" }
-			)
-		end
+		vim.api.nvim_buf_set_extmark(
+			bufnr,
+			ns_id,
+			row,
+			0,
+			{ end_col = border_width, hl_group = "DogshitnormHeaderBox" }
+		)
+		vim.api.nvim_buf_set_extmark(
+			bufnr,
+			ns_id,
+			row,
+			line_len - border_width,
+			{ end_col = line_len, hl_group = "DogshitnormHeaderBox" }
+		)
 
-		if i == 1 or i == 11 or i == 2 or i == 10 then
+		if row == 0 or row == 10 then
 			vim.api.nvim_buf_set_extmark(
 				bufnr,
 				ns_id,
 				row,
-				left_start,
-				{ end_col = left_end, hl_group = "DogshitnormHeaderBox" }
+				content_start,
+				{ end_col = content_end, hl_group = "DogshitnormHeaderBox" }
 			)
-		elseif i == 4 then
-			local logo_start = line:find("%s%+:%s+%+:%s+%+:%s*$")
-			if logo_start then
-				vim.api.nvim_buf_set_extmark(
-					bufnr,
-					ns_id,
-					row,
-					left_start,
-					{ end_col = logo_start - 1, hl_group = "DogshitnormHeaderFilename" }
-				)
-				vim.api.nvim_buf_set_extmark(
-					bufnr,
-					ns_id,
-					row,
-					logo_start - 1,
-					{ end_col = left_end, hl_group = "DogshitnormHeaderLogo2" }
-				)
+		elseif row ~= 1 and row ~= 9 then
+			local text_group = nil
+			if row == 3 then
+				text_group = "DogshitnormHeaderFilename"
+			elseif row == 5 then
+				text_group = "DogshitnormHeaderAuthor"
+			elseif row == 7 or row == 8 then
+				text_group = "DogshitnormHeaderDate"
 			end
-		elseif i == 6 then
-			local logo_start = line:find("%s#%+#%s+%+:%s+%+#+#+#+#+%s*$")
+
+			local _, gap_end = string.find(line, "%s%s%s%s+[%:%+#]")
+			local logo_start = gap_end and (gap_end - 1) or nil
 			if logo_start then
+				if text_group then
+					vim.api.nvim_buf_set_extmark(
+						bufnr,
+						ns_id,
+						row,
+						content_start,
+						{ end_col = logo_start, hl_group = text_group }
+					)
+				end
+
+				local logo_idx = math.max(0, math.min(6, row - 2))
 				vim.api.nvim_buf_set_extmark(
 					bufnr,
 					ns_id,
 					row,
-					left_start,
-					{ end_col = logo_start - 1, hl_group = "DogshitnormHeaderAuthor" }
+					logo_start,
+					{ end_col = content_end, hl_group = "DogshitnormHeaderLogo" .. logo_idx }
 				)
+			elseif text_group then
 				vim.api.nvim_buf_set_extmark(
 					bufnr,
 					ns_id,
 					row,
-					logo_start - 1,
-					{ end_col = left_end, hl_group = "DogshitnormHeaderLogo4" }
-				)
-			end
-		elseif i == 8 or i == 9 then
-			local text_group = i == 8 and "DogshitnormHeaderDate" or "DogshitnormHeaderDate"
-			local logo_group = i == 8 and "DogshitnormHeaderLogo5" or "DogshitnormHeaderLogo6"
-			local logo_start = line:find("%s#")
-			if logo_start then
-				vim.api.nvim_buf_set_extmark(
-					bufnr,
-					ns_id,
-					row,
-					left_start,
-					{ end_col = logo_start - 1, hl_group = text_group }
-				)
-				vim.api.nvim_buf_set_extmark(
-					bufnr,
-					ns_id,
-					row,
-					logo_start - 1,
-					{ end_col = left_end, hl_group = logo_group }
-				)
-			end
-		elseif i >= 3 and i <= 9 then
-			local logo_idx = math.max(0, math.min(6, i - 3))
-			local logo_start = line:find("%s[%:%+#]")
-			if logo_start then
-				vim.api.nvim_buf_set_extmark(
-					bufnr,
-					ns_id,
-					row,
-					logo_start - 1,
-					{ end_col = left_end, hl_group = "DogshitnormHeaderLogo" .. logo_idx }
+					content_start,
+					{ end_col = content_end, hl_group = text_group }
 				)
 			end
 		end
