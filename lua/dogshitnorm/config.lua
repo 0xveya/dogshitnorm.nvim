@@ -38,28 +38,40 @@ NAME		= your_project_name
 
 CC		= cc
 CFLAGS		= -Wall -Wextra -Werror
+CPPFLAGS	= -MMD -MP
+LDFLAGS		=
+LDLIBS		=
+DEBUG		?= 0
 RM		= rm -f
+
+ifeq ($(DEBUG),1)
+CFLAGS		+= -g3
+CPPFLAGS	+= -DDEBUG=1
+endif
 
 SRC_DIR		= src
 SRCS		= $(SRC_DIR)/main.c
 
 OBJS		= $(SRCS:.c=.o)
+DEPS		= $(OBJS:.o=.d)
 
 all: $(NAME)
 
-%.o: %.c
-	$(CC) $(CFLAGS) -c $< -o $@
-
 $(NAME): $(OBJS)
-	$(CC) $(CFLAGS) $(OBJS) -o $(NAME)
+	$(CC) $(CFLAGS) $(LDFLAGS) $(OBJS) $(LDLIBS) -o $(NAME)
+
+%.o: %.c
+	$(CC) $(CFLAGS) $(CPPFLAGS) -c $< -o $@
 
 clean:
-	$(RM) $(OBJS)
+	$(RM) $(OBJS) $(DEPS)
 
 fclean: clean
 	$(RM) $(NAME)
 
 re: fclean all
+
+-include $(DEPS)
 
 .PHONY: all clean fclean re
 .DEFAULT_GOAL := all

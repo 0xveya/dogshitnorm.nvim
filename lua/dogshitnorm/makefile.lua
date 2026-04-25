@@ -3,6 +3,50 @@ local utils = require("dogshitnorm.utils")
 
 local M = {}
 
+local function get_makefile_context(target, warn_on_missing)
+	local bufnr
+	local makefile_path
+	local project_root
+
+	if type(target) == "number" and vim.api.nvim_buf_is_valid(target) then
+		bufnr = target
+		makefile_path = vim.api.nvim_buf_get_name(bufnr)
+	elseif type(target) == "string" and target ~= "" then
+		makefile_path = target
+		bufnr = vim.fn.bufnr(makefile_path)
+		if bufnr == -1 then
+			bufnr = vim.fn.bufadd(makefile_path)
+			vim.fn.bufload(bufnr)
+		end
+	else
+		local current_file = vim.api.nvim_buf_get_name(0)
+		project_root = utils.find_project_root(current_file)
+		if not project_root then
+			if warn_on_missing then
+				vim.notify("No Makefile found in project", vim.log.levels.WARN)
+			end
+			return nil
+		end
+		makefile_path = project_root .. "/Makefile"
+		bufnr = vim.fn.bufnr(makefile_path)
+		if bufnr == -1 then
+			bufnr = vim.fn.bufadd(makefile_path)
+			vim.fn.bufload(bufnr)
+		end
+	end
+
+	if not makefile_path or not makefile_path:match("[Mm]akefile$") then
+		return nil
+	end
+
+	project_root = project_root or vim.fn.fnamemodify(makefile_path, ":h")
+	return {
+		bufnr = bufnr,
+		makefile_path = makefile_path,
+		project_root = project_root,
+	}
+end
+
 local function is_excluded_source(project_root, filepath, exclude_dirs)
 	local rel = utils.relative_path(project_root, filepath)
 	if not rel then
@@ -36,43 +80,357 @@ local function write_makefile_buffer(bufnr)
 	return true
 end
 
-function M.update_sources(target)
-	local cfg = config.get()
-	local bufnr
-	local makefile_path
-	local project_root
+local function find_assignment_index(lines, name)
+	local pattern = "^" .. name .. "%s*[?+:]?="
+	for i, line in ipairs(lines) do
+		if line:match(pattern) then
+			return i
+		end
+	end
+	return nil
+end
 
-	if type(target) == "number" and vim.api.nvim_buf_is_valid(target) then
-		bufnr = target
-		makefile_path = vim.api.nvim_buf_get_name(bufnr)
-	elseif type(target) == "string" and target ~= "" then
-		makefile_path = target
-		bufnr = vim.fn.bufnr(makefile_path)
-		if bufnr == -1 then
-			bufnr = vim.fn.bufadd(makefile_path)
-			vim.fn.bufload(bufnr)
+local function get_assignment_value(lines, name)
+	local idx = find_assignment_index(lines, name)
+	if not idx then
+		return nil
+	end
+	return lines[idx]:match("^[^=]+=%s*(.-)%s*$")
+end
+
+local function append_token(line, token)
+	if line:find(token, 1, true) then
+		return line
+	end
+	return line .. " " .. token
+end
+
+local function find_target_index(lines, target)
+	for i, line in ipairs(lines) do
+		if line:match("^" .. vim.pesc(target) .. "%s*:") then
+			return i
 		end
-	else
-		local current_file = vim.api.nvim_buf_get_name(0)
-		project_root = utils.find_project_root(current_file)
-		if not project_root then
-			vim.notify("No Makefile found in project", vim.log.levels.WARN)
-			return false
-		end
-		makefile_path = project_root .. "/Makefile"
-		bufnr = vim.fn.bufnr(makefile_path)
-		if bufnr == -1 then
-			bufnr = vim.fn.bufadd(makefile_path)
-			vim.fn.bufload(bufnr)
+	end
+	return nil
+end
+
+local function split_header(lines)
+	local header = {}
+	local idx = 1
+
+	while idx <= #lines and (lines[idx]:match("^#") or lines[idx] == "") do
+		table.insert(header, lines[idx])
+		idx = idx + 1
+	end
+
+	while #header > 0 and header[#header] == "" do
+		table.remove(header)
+	end
+
+	return header
+end
+
+local function collect_formatted_sources(project_root, src_dir, cfg)
+	local full_src_path = project_root .. "/" .. src_dir
+	if vim.fn.isdirectory(full_src_path) == 0 then
+		return {}
+	end
+
+	local found_files = vim.fn.globpath(full_src_path, "**/*.c", false, true)
+	local formatted = {}
+
+	for _, file in ipairs(found_files) do
+		if not is_excluded_source(project_root, file, cfg.makefile_exclude_dirs) then
+			local rel_to_src = utils.relative_path(full_src_path, file)
+			if rel_to_src and rel_to_src ~= "" then
+				table.insert(formatted, "$(SRC_DIR)/" .. rel_to_src)
+			end
 		end
 	end
 
-	if not makefile_path:match("[Mm]akefile$") then
+	table.sort(formatted)
+	return formatted
+end
+
+local function build_source_block(formatted)
+	local source_files = vim.deepcopy(formatted)
+	if #source_files == 0 then
+		source_files = { "$(SRC_DIR)/main.c" }
+	end
+
+	local lines = {}
+	for i, file in ipairs(source_files) do
+		if i == 1 then
+			table.insert(lines, "SRCS\t\t= " .. file .. (#source_files > 1 and " \\" or ""))
+		else
+			local line = "\t\t\t  " .. file
+			if i < #source_files then
+				line = line .. " \\"
+			end
+			table.insert(lines, line)
+		end
+	end
+	return lines
+end
+
+local function build_executable_template(name, src_dir, src_block, debug_value)
+	debug_value = debug_value or "0"
+	local lines = {
+		"NAME\t\t= " .. name,
+		"",
+		"CC\t\t= cc",
+		"CFLAGS\t\t= -Wall -Wextra -Werror",
+		"CPPFLAGS\t= -MMD -MP",
+		"LDFLAGS\t\t=",
+		"LDLIBS\t\t=",
+		"DEBUG\t\t?= " .. debug_value,
+		"RM\t\t= rm -f",
+		"",
+		"ifeq ($(DEBUG),1)",
+		"CFLAGS\t\t+= -g3",
+		"CPPFLAGS\t+= -DDEBUG=1",
+		"endif",
+		"",
+		"SRC_DIR\t\t= " .. src_dir,
+	}
+
+	vim.list_extend(lines, src_block)
+	vim.list_extend(lines, {
+		"",
+		"OBJS\t\t= $(SRCS:.c=.o)",
+		"DEPS\t\t= $(OBJS:.o=.d)",
+		"",
+		"all: $(NAME)",
+		"",
+		"$(NAME): $(OBJS)",
+		"\t$(CC) $(CFLAGS) $(LDFLAGS) $(OBJS) $(LDLIBS) -o $(NAME)",
+		"",
+		"%.o: %.c",
+		"\t$(CC) $(CFLAGS) $(CPPFLAGS) -c $< -o $@",
+		"",
+		"clean:",
+		"\t$(RM) $(OBJS) $(DEPS)",
+		"",
+		"fclean: clean",
+		"\t$(RM) $(NAME)",
+		"",
+		"re: fclean all",
+		"",
+		"-include $(DEPS)",
+		"",
+		".PHONY: all clean fclean re",
+		".DEFAULT_GOAL := all",
+	})
+
+	return lines
+end
+
+local function build_library_template(name, src_dir, src_block, debug_value)
+	debug_value = debug_value or "0"
+	local lines = {
+		"NAME\t\t= " .. name,
+		"",
+		"CC\t\t= cc",
+		"CFLAGS\t\t= -Wall -Wextra -Werror",
+		"CPPFLAGS\t= -MMD -MP",
+		"DEBUG\t\t?= " .. debug_value,
+		"RM\t\t= rm -f",
+		"AR\t\t= ar",
+		"ARFLAGS\t\t= rcs",
+		"",
+		"ifeq ($(DEBUG),1)",
+		"CFLAGS\t\t+= -g3",
+		"CPPFLAGS\t+= -DDEBUG=1",
+		"endif",
+		"",
+		"SRC_DIR\t\t= " .. src_dir,
+	}
+
+	vim.list_extend(lines, src_block)
+	vim.list_extend(lines, {
+		"",
+		"OBJS\t\t= $(SRCS:.c=.o)",
+		"DEPS\t\t= $(OBJS:.o=.d)",
+		"",
+		"all: $(NAME)",
+		"",
+		"$(NAME): $(OBJS)",
+		"\t$(RM) $(NAME)",
+		"\t$(AR) $(ARFLAGS) $(NAME) $(OBJS)",
+		"",
+		"%.o: %.c",
+		"\t$(CC) $(CFLAGS) $(CPPFLAGS) -c $< -o $@",
+		"",
+		"clean:",
+		"\t$(RM) $(OBJS) $(DEPS)",
+		"",
+		"fclean: clean",
+		"\t$(RM) $(NAME)",
+		"",
+		"re: fclean all",
+		"",
+		"-include $(DEPS)",
+		"",
+		".PHONY: all clean fclean re",
+		".DEFAULT_GOAL := all",
+	})
+
+	return lines
+end
+
+local function write_body_with_header(bufnr, body_lines)
+	local existing_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+	local final_lines = split_header(existing_lines)
+	if #final_lines > 0 then
+		table.insert(final_lines, "")
+	end
+	vim.list_extend(final_lines, body_lines)
+	vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, final_lines)
+end
+
+local function save_makefile(bufnr)
+	local written, err = write_makefile_buffer(bufnr)
+	if not written then
+		vim.notify("Makefile sync failed to save: " .. tostring(err), vim.log.levels.ERROR)
+		return false
+	end
+	return true
+end
+
+local function normalize_library_name(name)
+	if not name or name == "" then
+		return nil
+	end
+	if not name:match("%.a$") then
+		name = name .. ".a"
+	end
+	return name
+end
+
+local function infer_library_name(current_name, project_root, override_name)
+	if override_name and override_name ~= "" then
+		return normalize_library_name(override_name)
+	end
+
+	if current_name and current_name ~= "" and current_name ~= "your_project_name" then
+		if current_name:match("%.a$") then
+			return current_name
+		end
+		if not current_name:match("^lib") then
+			current_name = "lib" .. current_name
+		end
+		return current_name .. ".a"
+	end
+
+	local project_name = vim.fn.fnamemodify(project_root, ":t")
+	if not project_name:match("^lib") then
+		project_name = "lib" .. project_name
+	end
+	return project_name .. ".a"
+end
+
+local function ensure_debug_features(lines)
+	local cflags_idx = find_assignment_index(lines, "CFLAGS")
+	local cppflags_idx = find_assignment_index(lines, "CPPFLAGS")
+
+	if cppflags_idx then
+		lines[cppflags_idx] = append_token(lines[cppflags_idx], "-MMD")
+		lines[cppflags_idx] = append_token(lines[cppflags_idx], "-MP")
+	else
+		local insert_at = cflags_idx or find_assignment_index(lines, "CC") or 1
+		table.insert(lines, insert_at + 1, "CPPFLAGS\t= -MMD -MP")
+		cppflags_idx = insert_at + 1
+	end
+
+	local debug_idx = find_assignment_index(lines, "DEBUG")
+	if not debug_idx then
+		table.insert(lines, cppflags_idx + 1, "DEBUG\t\t?= 0")
+		debug_idx = cppflags_idx + 1
+	end
+
+	local has_debug_block = false
+	for i = debug_idx + 1, math.min(debug_idx + 5, #lines) do
+		if lines[i] == "ifeq ($(DEBUG),1)" then
+			has_debug_block = true
+			break
+		end
+	end
+	if not has_debug_block then
+		table.insert(lines, debug_idx + 1, "")
+		table.insert(lines, debug_idx + 2, "ifeq ($(DEBUG),1)")
+		table.insert(lines, debug_idx + 3, "CFLAGS\t\t+= -g3")
+		table.insert(lines, debug_idx + 4, "CPPFLAGS\t+= -DDEBUG=1")
+		table.insert(lines, debug_idx + 5, "endif")
+	end
+
+	local objs_idx = find_assignment_index(lines, "OBJS")
+	if objs_idx and not find_assignment_index(lines, "DEPS") then
+		table.insert(lines, objs_idx + 1, "DEPS\t\t= $(OBJS:.o=.d)")
+	end
+
+	local pattern_idx = find_target_index(lines, "%.o")
+	if pattern_idx then
+		for i = pattern_idx + 1, #lines do
+			local line = lines[i]
+			if line == "" then
+				break
+			end
+			if line:match("^\t") and line:find("$(CC)", 1, true) and line:find("-c $< -o $@", 1, true) then
+				if not line:find("$(CPPFLAGS)", 1, true) then
+					lines[i] = line:gsub("%$%(CFLAGS%)", "$(CFLAGS) $(CPPFLAGS)", 1)
+				end
+				break
+			end
+		end
+	end
+
+	local clean_idx = find_target_index(lines, "clean")
+	if clean_idx then
+		for i = clean_idx + 1, #lines do
+			local line = lines[i]
+			if line ~= "" and not line:match("^\t") then
+				break
+			end
+			if line:match("^\t") and line:find("$(RM)", 1, true) then
+				if not line:find("$(DEPS)", 1, true) then
+					lines[i] = append_token(line, "$(DEPS)")
+				end
+				break
+			end
+		end
+	end
+
+	local has_dep_include = false
+	for _, line in ipairs(lines) do
+		if line == "-include $(DEPS)" then
+			has_dep_include = true
+			break
+		end
+	end
+	if not has_dep_include then
+		local phony_idx = find_target_index(lines, ".PHONY")
+		if phony_idx then
+			table.insert(lines, phony_idx, "-include $(DEPS)")
+			table.insert(lines, phony_idx, "")
+		else
+			table.insert(lines, "")
+			table.insert(lines, "-include $(DEPS)")
+		end
+	end
+
+	return debug_idx
+end
+
+function M.update_sources(target)
+	local cfg = config.get()
+	local ctx = get_makefile_context(target, true)
+	if not ctx then
 		return false
 	end
 
+	local bufnr = ctx.bufnr
 	local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-	local src_dir = utils.get_src_dir(makefile_path, cfg.src_dir)
+	local src_dir = utils.get_src_dir(ctx.makefile_path, cfg.src_dir)
 	local start_idx, end_idx = nil, nil
 
 	for i, line in ipairs(lines) do
@@ -91,38 +449,8 @@ function M.update_sources(target)
 	end
 	end_idx = end_idx or #lines
 
-	project_root = project_root or vim.fn.fnamemodify(makefile_path, ":h")
-	local full_src_path = project_root .. "/" .. src_dir
-
-	if vim.fn.isdirectory(full_src_path) == 0 then
-		return false
-	end
-
-	local found_files = vim.fn.globpath(full_src_path, "**/*.c", false, true)
-	local formatted = {}
-
-	for _, file in ipairs(found_files) do
-		if not is_excluded_source(project_root, file, cfg.makefile_exclude_dirs) then
-			local rel_to_src = utils.relative_path(full_src_path, file)
-			if rel_to_src and rel_to_src ~= "" then
-				table.insert(formatted, "$(SRC_DIR)/" .. rel_to_src)
-			end
-		end
-	end
-	table.sort(formatted)
-
-	local new_srcs = {}
-	for i, file in ipairs(formatted) do
-		if i == 1 then
-			table.insert(new_srcs, "SRCS		= " .. file .. (#formatted > 1 and " \\" or ""))
-		else
-			local l = "			  " .. file
-			if i < #formatted then
-				l = l .. " \\"
-			end
-			table.insert(new_srcs, l)
-		end
-	end
+	local formatted = collect_formatted_sources(ctx.project_root, src_dir, cfg)
+	local new_srcs = build_source_block(formatted)
 
 	-- Check if content actually changed
 	local old_block = vim.list_slice(lines, start_idx, end_idx)
@@ -169,9 +497,7 @@ function M.sync(target)
 		return true, file_count, changed
 	end
 
-	local written, err = write_makefile_buffer(bufnr)
-	if not written then
-		vim.notify("Makefile sync failed to save: " .. tostring(err), vim.log.levels.ERROR)
+	if not save_makefile(bufnr) then
 		return false, file_count, changed
 	end
 	return true, file_count, changed
@@ -208,11 +534,8 @@ function M.background_sync(filepath)
 	end
 
 	-- Only save if changed
-	if changed then
-		local written, err = write_makefile_buffer(bufnr)
-		if not written then
-			vim.notify("Makefile sync failed to save: " .. tostring(err), vim.log.levels.ERROR)
-		end
+	if changed and not save_makefile(bufnr) then
+		return
 	end
 end
 
@@ -257,6 +580,99 @@ function M.generate(bufnr)
 			vim.cmd("normal! $")
 		end
 	end)
+end
+
+function M.convert_to_library(target, library_name)
+	local cfg = config.get()
+	local ctx = get_makefile_context(target, true)
+	if not ctx then
+		return false
+	end
+
+	local lines = vim.api.nvim_buf_get_lines(ctx.bufnr, 0, -1, false)
+	local src_dir = get_assignment_value(lines, "SRC_DIR") or utils.get_src_dir(ctx.makefile_path, cfg.src_dir)
+	local current_name = get_assignment_value(lines, "NAME")
+	local debug_value = get_assignment_value(lines, "DEBUG") or "0"
+	local name = infer_library_name(current_name, ctx.project_root, library_name)
+
+	local src_block = build_source_block(collect_formatted_sources(ctx.project_root, src_dir, cfg))
+	write_body_with_header(ctx.bufnr, build_library_template(name, src_dir, src_block, debug_value))
+	if not save_makefile(ctx.bufnr) then
+		return false
+	end
+
+	vim.notify("Makefile converted to library mode: " .. name, vim.log.levels.INFO, { title = "dogshitnorm" })
+	return true
+end
+
+function M.set_debug(target, mode)
+	local ctx = get_makefile_context(target, true)
+	if not ctx then
+		return false
+	end
+
+	local lines = vim.api.nvim_buf_get_lines(ctx.bufnr, 0, -1, false)
+	local debug_idx = ensure_debug_features(lines)
+	local current_value = lines[debug_idx]:match("=%s*(.-)%s*$") or "0"
+	local normalized = tostring(mode or "toggle"):lower()
+	local next_value = current_value
+
+	if normalized == "toggle" or normalized == "" then
+		if current_value == "1" then
+			next_value = "0"
+		else
+			next_value = "1"
+		end
+	elseif normalized == "on" or normalized == "1" or normalized == "true" then
+		next_value = "1"
+	elseif normalized == "off" or normalized == "0" or normalized == "false" then
+		next_value = "0"
+	else
+		vim.notify("Use :Makedebug [toggle|on|off]", vim.log.levels.WARN, { title = "dogshitnorm" })
+		return false
+	end
+
+	lines[debug_idx] = lines[debug_idx]:gsub("=%s*.-%s*$", "= " .. next_value)
+	vim.api.nvim_buf_set_lines(ctx.bufnr, 0, -1, false, lines)
+	if not save_makefile(ctx.bufnr) then
+		return false
+	end
+
+	local state = next_value == "1" and "ON" or "OFF"
+	vim.notify("Makefile debug mode: " .. state, vim.log.levels.INFO, { title = "dogshitnorm" })
+	return true
+end
+
+function M.show_status(target)
+	local ctx = get_makefile_context(target, true)
+	if not ctx then
+		return false
+	end
+
+	local lines = vim.api.nvim_buf_get_lines(ctx.bufnr, 0, -1, false)
+	local name = get_assignment_value(lines, "NAME") or "unknown"
+	local debug_value = get_assignment_value(lines, "DEBUG") or "0"
+	local cppflags = get_assignment_value(lines, "CPPFLAGS") or ""
+	local has_dep_include = false
+
+	for _, line in ipairs(lines) do
+		if line == "-include $(DEPS)" then
+			has_dep_include = true
+			break
+		end
+	end
+
+	local mode = name:match("%.a$") and "library" or "binary"
+	local debug_state = debug_value == "1" and "ON" or "OFF"
+	local deps_state = (cppflags:find("-MMD", 1, true) and cppflags:find("-MP", 1, true) and has_dep_include) and "ON"
+		or "OFF"
+
+	vim.notify(
+		string.format("Makefile status: %s target (%s), DEBUG=%s, deps=%s", name, mode, debug_state, deps_state),
+		vim.log.levels.INFO,
+		{ title = "dogshitnorm" }
+	)
+	return true
 end
 
 return M

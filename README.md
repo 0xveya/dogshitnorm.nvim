@@ -8,8 +8,9 @@ It also includes **custom built-in checks** for edge cases and subjective rules 
 
 * **Asynchronous Execution**: Runs `norminette` in the background without freezing your editor.
 * **Smart Header Guard Generator**: Automatically inserts C-style `#ifndef` guards in new `.h` files. It intelligently waits for the 42 Header to be inserted first, ensures clean spacing, and keeps you in Normal mode.
-* **Makefile Boilerplate**: Instantly populates new `Makefile`s with 42-compliant mandatory rules (`all`, `clean`, `fclean`, `re`) and a standard project structure.
+* **Makefile Boilerplate**: Instantly populates new `Makefile`s with 42-compliant mandatory rules (`all`, `clean`, `fclean`, `re`), dep-file support (`-MMD -MP`), and built-in debug toggles.
 * **Smart Source Sync**: Automatically detects your `SRC_DIR` from the Makefile and syncs your `SRCS` list with all `.c` files found in that directory (recursive). No more manual typing of every new file.
+* **Makefile Ergonomics**: Use `:Makelib [name]` to convert the current project Makefile into a static-library template, `:Makedebug [toggle|on|off]` to toggle debug mode, and `:Makestatus` to show whether you are in library mode and whether debug/deps are enabled.
 * **Include Sorting**: Sorts contiguous `#include` blocks alphabetically with `:Includesort`, or automatically before saving when enabled.
 * **Define Sorting**: Sorts contiguous simple `# define` blocks alphabetically with `:Definesort`, while leaving header guard defines alone.
 * **Header Prototype Sorting**: Sorts contiguous single-line function prototype blocks alphabetically with `:Protosort`, or automatically before saving when enabled.
@@ -88,6 +89,9 @@ Using [lazy.nvim]():
 * **Quick Fixes**: Use Neovim's `vim.lsp.buf.code_action()` (`gra` by default on current Neovim) on a diagnostic line, run `:NormFix`, or run `:NormFixAll` to repair safe file-level issues such as header guards, include/define/prototype order, Makefile sources, whitespace, return parentheses, missing `void`, function spacing, overlong-function line savers, and snake_case naming.
 * **Auto-Makefile**: Creating a new `Makefile` will trigger the 42 Header and append a project stub.
 * **Source Sync**: Press `<leader>cu` (or run `:Makesync`) inside a Makefile. The plugin will read your `SRC_DIR` variable, crawl that folder for `.c` files, update your `SRCS` block with proper 42-style formatting and backslashes, and write the Makefile.
+* **Library Conversion**: Run `:Makelib` to rewrite the current Makefile as a static-library build. Pass an optional archive name such as `:Makelib libftprintf` or `:Makelib libftprintf.a`. If `NAME` already ends in `.a`, that archive name is preserved and `:Makestatus` reports library mode automatically.
+* **Debug Toggle**: Run `:Makedebug`, `:Makedebug on`, or `:Makedebug off` to flip the Makefile `DEBUG` flag. The plugin will ensure the dep-file and debug boilerplate exists and then notify the current state.
+* **Makefile Status**: Run `:Makestatus` to see the current target name, whether the file is in library or binary mode, and whether debug/dependency tracking is enabled.
 
 ## Configuration
 

@@ -180,6 +180,20 @@ function M.setup(opts)
 	vim.api.nvim_create_user_command("Makesync", function()
 		makefile.sync()
 	end, {})
+	vim.api.nvim_create_user_command("Makelib", function(opts)
+		makefile.convert_to_library(nil, opts.args)
+	end, { nargs = "?" })
+	vim.api.nvim_create_user_command("Makedebug", function(opts)
+		makefile.set_debug(nil, opts.args)
+	end, {
+		nargs = "?",
+		complete = function()
+			return { "toggle", "on", "off" }
+		end,
+	})
+	vim.api.nvim_create_user_command("Makestatus", function()
+		makefile.show_status()
+	end, {})
 	vim.api.nvim_create_user_command("Includesort", function()
 		header.sort_includes(vim.api.nvim_get_current_buf())
 	end, {})
