@@ -40,7 +40,7 @@ jobs:
         run: nvim --headless -u NONE +"helptags doc" +qall
 
       - name: Run smoke test
-        run: nvim --headless -u NONE +"lua dofile('scripts/smoke.lua')"
+        run: timeout 60s nvim --headless -u NONE +"lua dofile('scripts/smoke.lua')" +qall!
 
   docs:
     runs-on: ubuntu-latest
