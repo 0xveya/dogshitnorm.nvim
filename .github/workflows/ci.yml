@@ -10,31 +10,29 @@ jobs:
   lua:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: leafo/gh-actions-lua@v11
-        with:
-          luaVersion: "5.1"
+      - name: Install Lua toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cargo liblua5.1-0-dev lua5.1 luarocks neovim
 
-      - uses: leafo/gh-actions-luarocks@v5
+      - name: Install StyLua
+        run: cargo install stylua --locked
 
-      - uses: JohnnyMorganz/stylua-action@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          version: latest
-          args: --check lua
+      - name: Check formatting
+        run: ~/.cargo/bin/stylua --check lua
 
       - name: Install luacheck
-        run: luarocks install luacheck
+        run: luarocks --lua-version=5.1 install --local luacheck
 
       - name: Run luacheck
-        run: luacheck lua
+        run: |
+          eval "$(luarocks --lua-version=5.1 path)"
+          luacheck lua
 
       - name: Check Lua syntax
-        run: find lua -name '*.lua' -print0 | xargs -0 -n1 luac -p
-
-      - name: Install Neovim
-        run: sudo apt-get update && sudo apt-get install -y neovim
+        run: find lua -name '*.lua' -print0 | xargs -0 -n1 luac5.1 -p
 
       - name: Generate helptags
         run: nvim --headless -u NONE +"helptags doc" +qall
@@ -48,9 +46,9 @@ jobs:
       run:
         working-directory: docs
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
