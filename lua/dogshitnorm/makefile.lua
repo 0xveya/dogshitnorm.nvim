@@ -174,58 +174,6 @@ local function build_source_block(formatted)
 	return lines
 end
 
-local function build_executable_template(name, src_dir, src_block, debug_value)
-	debug_value = debug_value or "0"
-	local lines = {
-		"NAME\t\t= " .. name,
-		"",
-		"CC\t\t= cc",
-		"CFLAGS\t\t= -Wall -Wextra -Werror",
-		"CPPFLAGS\t= -MMD -MP",
-		"LDFLAGS\t\t=",
-		"LDLIBS\t\t=",
-		"DEBUG\t\t?= " .. debug_value,
-		"RM\t\t= rm -f",
-		"",
-		"ifeq ($(DEBUG),1)",
-		"CFLAGS\t\t+= -g3",
-		"CPPFLAGS\t+= -DDEBUG=1",
-		"endif",
-		"",
-		"SRC_DIR\t\t= " .. src_dir,
-	}
-
-	vim.list_extend(lines, src_block)
-	vim.list_extend(lines, {
-		"",
-		"OBJS\t\t= $(SRCS:.c=.o)",
-		"DEPS\t\t= $(OBJS:.o=.d)",
-		"",
-		"all: $(NAME)",
-		"",
-		"$(NAME): $(OBJS)",
-		"\t$(CC) $(CFLAGS) $(LDFLAGS) $(OBJS) $(LDLIBS) -o $(NAME)",
-		"",
-		"%.o: %.c",
-		"\t$(CC) $(CFLAGS) $(CPPFLAGS) -c $< -o $@",
-		"",
-		"clean:",
-		"\t$(RM) $(OBJS) $(DEPS)",
-		"",
-		"fclean: clean",
-		"\t$(RM) $(NAME)",
-		"",
-		"re: fclean all",
-		"",
-		"-include $(DEPS)",
-		"",
-		".PHONY: all clean fclean re",
-		".DEFAULT_GOAL := all",
-	})
-
-	return lines
-end
-
 local function build_library_template(name, src_dir, src_block, debug_value)
 	debug_value = debug_value or "0"
 	local lines = {
@@ -615,7 +563,7 @@ function M.set_debug(target, mode)
 	local debug_idx = ensure_debug_features(lines)
 	local current_value = lines[debug_idx]:match("=%s*(.-)%s*$") or "0"
 	local normalized = tostring(mode or "toggle"):lower()
-	local next_value = current_value
+	local next_value
 
 	if normalized == "toggle" or normalized == "" then
 		if current_value == "1" then

@@ -682,6 +682,7 @@ local function check_includes_at_beginning(bufnr, diagnostics, container)
 
 	for _, child in ipairs(named_children(container)) do
 		local child_type = child:type()
+		local ignorable_at_top = child_type == "comment" or child_type == "preproc_def" or child_type == "identifier"
 		if child_type == "preproc_include" then
 			if saw_non_include then
 				add_diagnostic(
@@ -692,9 +693,7 @@ local function check_includes_at_beginning(bufnr, diagnostics, container)
 					"All includes must be at the beginning of the file."
 				)
 			end
-		elseif child_type == "comment" or child_type == "preproc_def" or child_type == "identifier" then
-			-- Header comments and header guard defines do not end the include section.
-		else
+		elseif not ignorable_at_top then
 			saw_non_include = true
 		end
 

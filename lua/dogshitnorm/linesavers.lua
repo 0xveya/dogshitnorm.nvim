@@ -248,7 +248,8 @@ local function find_while_increment_hints(bufnr, node)
 					while_lnum = while_row,
 					text = "Loop counter `"
 						.. var
-						.. "` is changed inside this while; check whether a comma/post-inc condition can save a line without changing final state.",
+						.. "` is changed inside this while; check whether a comma/post-inc condition "
+						.. "can save a line without changing final state.",
 				})
 			end
 		end
