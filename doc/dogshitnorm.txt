@@ -1,0 +1,158 @@
+*dogshitnorm.txt*            dogshitnorm.nvim             Last change: 2026 April 25
+
+==============================================================================
+CONTENTS                                                 *dogshitnorm-contents*
+
+1. Introduction ........................................ |dogshitnorm-intro|
+2. Requirements ........................................ |dogshitnorm-requirements|
+3. Installation ........................................ |dogshitnorm-installation|
+4. Commands ............................................ |dogshitnorm-commands|
+5. Configuration ....................................... |dogshitnorm-configuration|
+6. Makefiles ........................................... |dogshitnorm-makefiles|
+7. Headers ............................................. |dogshitnorm-headers|
+
+==============================================================================
+1. Introduction                                         *dogshitnorm-intro*
+
+dogshitnorm.nvim is a Neovim plugin for 42-style C projects. It combines:
+
+- asynchronous `norminette` diagnostics
+- safe code actions and quick fixes
+- Makefile generation and source syncing
+- native 42 header insertion and update
+- header guard, include, define, and prototype helpers
+- visual 42 header styling
+
+Open the public docs at:
+https://0xveya.github.io/dogshitnorm.nvim/
+
+==============================================================================
+2. Requirements                                    *dogshitnorm-requirements*
+
+- Neovim 0.10+
+- `norminette` in `$PATH`
+- Tree-sitter C parser for the full custom diagnostics
+
+==============================================================================
+3. Installation                                    *dogshitnorm-installation*
+
+With `lazy.nvim`:
+
+>lua
+{
+  "0xveya/dogshitnorm.nvim",
+  ft = { "c", "cpp", "make" },
+  opts = {
+    cmd = { "uv", "tool", "run", "norminette" },
+    args = { "--no-colors" },
+    active_dirs = { "~/coding/42" },
+  },
+}
+<
+
+Run `:helptags ALL` after local changes if needed.
+
+==============================================================================
+4. Commands                                          *dogshitnorm-commands*
+
+General:
+
+- `:Norminette`
+- `:NormFix`
+- `:NormFixAll`
+- `:NormLineCounts`
+- `:NormLineSavers`
+
+Headers:
+
+- `:Stdheader` inserts or refreshes the native 42 header
+- `:HeaderToggle` toggles visual header styling
+- `:Includesort`
+- `:Definesort`
+- `:Protosort`
+
+Makefiles:
+
+- `:Makegen`
+- `:Makesync`
+- `:Makelib [name]`
+- `:Makedebug [toggle|on|off]`
+- `:Makestatus`
+
+==============================================================================
+5. Configuration                                  *dogshitnorm-configuration*
+
+Common options:
+
+- `cmd`
+- `args`
+- `active_dirs`
+- `keybinding`
+- `fix_keybinding`
+- `lsp_code_actions`
+
+Header options:
+
+- `auto_42_header`
+- `update_42_header`
+- `header_keybinding`
+- `header_style_enabled`
+- `header_style_keybinding`
+- `header_user`
+- `header_email`
+- `header_colors`
+- `auto_header_guard`
+- `guard_keybinding`
+
+Makefile options:
+
+- `auto_makefile`
+- `makefile_keybinding`
+- `auto_sync_makefile`
+- `makesync_keybinding`
+- `makefile_exclude_dirs`
+- `src_dir`
+- `notify_on_sync`
+
+See the web docs or README for the full option table and examples.
+
+==============================================================================
+6. Makefiles                                        *dogshitnorm-makefiles*
+
+Generated Makefiles include:
+
+- explicit `SRCS`
+- dependency files with `CPPFLAGS = -MMD -MP`
+- `DEPS` and `-include $(DEPS)`
+- `DEBUG ?= 0`
+- `:Makelib` conversion for static libraries
+- `:Makedebug` to flip debug mode
+- `:Makestatus` to report binary/library and debug/deps state
+
+`makefile_exclude_dirs` defaults to ignoring:
+
+- `.git`
+- `.jj`
+- `tests`
+- `test`
+- `build`
+- `libft`
+
+==============================================================================
+7. Headers                                            *dogshitnorm-headers*
+
+dogshitnorm.nvim can insert the standard 42 header for C-like files and
+Makefiles without depending on `42Paris/42header`.
+
+Identity is resolved from, in order:
+
+1. `opts.header_user` / `opts.header_email`
+2. `vim.g.user42` / `vim.g.mail42`
+3. environment variables
+
+The `Updated:` line is refreshed on save when `update_42_header = true`.
+
+The visual styling previously provided by `fancy-header.nvim` is included in
+dogshitnorm itself and toggled with `:HeaderToggle`.
+
+vim:tw=78:ts=8:noet:ft=help:norl:

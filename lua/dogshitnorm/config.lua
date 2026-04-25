@@ -15,6 +15,8 @@ M.defaults = {
 	auto_sync_makefile = true,
 	makesync_keybinding = "<leader>cu",
 	auto_makefile = true,
+	auto_42_header = true,
+	update_42_header = true,
 	auto_header_guard = true,
 	auto_sort_includes = false,
 	auto_sort_defines = false,
@@ -29,10 +31,22 @@ M.defaults = {
 	debug_log = false,
 	debug_log_path = nil,
 	guard_keybinding = "<leader>ch",
+	header_keybinding = "<leader>42",
+	header_style_keybinding = "<leader>4h",
 	makefile_keybinding = "<leader>cm",
 	src_dir = "src",
 	makefile_exclude_dirs = { ".git", ".jj", "tests", "test", "build", "libft" },
 	notify_on_sync = true,
+	header_user = nil,
+	header_email = nil,
+	header_style_enabled = true,
+	header_colors = {
+		box = { fg = "#6e6a86" },
+		filename = { fg = "#f6c177", bold = true },
+		author = { fg = "#9ccfd8" },
+		date = { fg = "#c4a7e7" },
+		logo_42 = { start = "#eb6f92", end_ = "#31748f" },
+	},
 	makefile_stub = [[
 NAME		= your_project_name
 

@@ -1,4 +1,5 @@
 local config = require("dogshitnorm.config")
+local header42 = require("dogshitnorm.header42")
 local utils = require("dogshitnorm.utils")
 
 local M = {}
@@ -557,9 +558,8 @@ function M.generate(bufnr)
 		return
 	end
 
-	if not content:match("/%* %*+ %*/") then
-		if vim.fn.exists(":Stdheader") > 0 then
-			vim.cmd("Stdheader")
+	if not content:match("/%* %*+ %*/") and not content:match("^# %*+ #") then
+		if header42.ensure(bufnr) then
 			existing_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
 		end
 	end

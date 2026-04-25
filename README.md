@@ -4,10 +4,14 @@ A lightweight, asynchronous Neovim plugin that runs `norminette` and displays er
 
 It also includes **custom built-in checks** for edge cases and subjective rules that the official `norminette` tool ignores, ensuring your C projects are fully compliant with the 42 Norm.
 
+Docs: <https://0xveya.github.io/dogshitnorm.nvim/>
+
 ## Features
 
 * **Asynchronous Execution**: Runs `norminette` in the background without freezing your editor.
-* **Smart Header Guard Generator**: Automatically inserts C-style `#ifndef` guards in new `.h` files. It intelligently waits for the 42 Header to be inserted first, ensures clean spacing, and keeps you in Normal mode.
+* **Native 42 Header Support**: Inserts and refreshes the standard 42 header for C-like files and Makefiles without depending on `42Paris/42header`.
+* **Header Styling**: Merges the visual 42 header gradient/highlighting from `fancy-header.nvim` into the main plugin with a toggle command.
+* **Smart Header Guard Generator**: Automatically inserts C-style `#ifndef` guards in new `.h` files once the 42 header is present, ensures clean spacing, and keeps you in Normal mode.
 * **Makefile Boilerplate**: Instantly populates new `Makefile`s with 42-compliant mandatory rules (`all`, `clean`, `fclean`, `re`), dep-file support (`-MMD -MP`), and built-in debug toggles.
 * **Smart Source Sync**: Automatically detects your `SRC_DIR` from the Makefile and syncs your `SRCS` list with all `.c` files found in that directory (recursive). No more manual typing of every new file.
 * **Makefile Ergonomics**: Use `:Makelib [name]` to convert the current project Makefile into a static-library template, `:Makedebug [toggle|on|off]` to toggle debug mode, and `:Makestatus` to show whether you are in library mode and whether debug/deps are enabled.
@@ -39,9 +43,6 @@ Using [lazy.nvim]():
 {
     "0xveya/dogshitnorm.nvim",
     ft = { "c", "cpp", "make" },
-    dependencies = {
-        "42Paris/42header", -- Required for auto-header integration
-    },
     opts = {
         -- Recommended: use 'uv' tool for a clean environment
         cmd = { "uv", "tool", "run", "norminette" },
@@ -52,12 +53,23 @@ Using [lazy.nvim]():
         lint_on_save = true,
 
         -- Header Guard settings
+        auto_42_header = true,
+        update_42_header = true,
         auto_header_guard = true,
+        header_keybinding = "<leader>42",
+        header_style_keybinding = "<leader>4h",
         guard_keybinding = "<leader>ch",
         auto_sort_defines = false,
         auto_sort_prototypes = false,
         line_count_enabled = false,
         line_count_keybinding = "<leader>cl",
+        header_colors = {
+            box = { fg = "#6e6a86" },
+            filename = { fg = "#f6c177", bold = true },
+            author = { fg = "#9ccfd8" },
+            date = { fg = "#c4a7e7" },
+            logo_42 = { start = "#eb6f92", end_ = "#31748f" },
+        },
 
         -- Makefile settings
         auto_makefile = true,
@@ -80,6 +92,8 @@ Using [lazy.nvim]():
 ## Usage
 
 * **Linting**: Save your file (`:w`) or press `<leader>cn`.
+* **42 Header**: Run `:Stdheader` or press `header_keybinding` to insert/refresh the native 42 header. Saving a file updates the `Updated:` line when enabled.
+* **Header Styling**: Run `:HeaderToggle` or press `header_style_keybinding` to toggle the merged `fancy-header.nvim` visuals.
 * **Auto-Guards**: Creating or saving a `.h` file inside an active directory will automatically trigger/fix inclusion guards.
 * **Include Sorting**: Run `:Includesort` inside a `.c` or `.h` file to sort contiguous include blocks. Set `auto_sort_includes = true` to run this automatically before saving C and header files.
 * **Define Sorting**: Run `:Definesort` inside a `.c` or `.h` file to sort contiguous simple define blocks. Set `auto_sort_defines = true` to run this automatically before saving C and header files.
@@ -101,7 +115,15 @@ Using [lazy.nvim]():
 | `norminette_format` | `string` | `"json"` | Ask norminette for structured JSON output. Falls back to human output parsing if JSON is unavailable. |
 | `suppress_duplicate_diagnostics` | `boolean` | `true` | Hide Tree-sitter diagnostics when norminette already reported the same rule. |
 | `lsp_code_actions` | `boolean` | `true` | Start an in-process dogshitnorm LSP client that contributes code actions to `vim.lsp.buf.code_action()`. |
+| `auto_42_header` | `boolean` | `true` | Insert the standard 42 header automatically in new C-like files and Makefiles. |
+| `update_42_header` | `boolean` | `true` | Refresh the `Updated:` timestamp on save when a 42 header is present. |
 | `auto_header_guard` | `boolean` | `true` | Auto-insert guards in `.h` files. |
+| `header_keybinding` | `string` | `"<leader>42"` | Keymap to insert or refresh the 42 header. |
+| `header_style_enabled` | `boolean` | `true` | Apply merged `fancy-header.nvim` visual styling to 42 headers. |
+| `header_style_keybinding` | `string` | `"<leader>4h"` | Keymap to toggle header styling. |
+| `header_user` | `string` | `nil` | Override the 42 username used in generated headers. Falls back to `vim.g.user42`. |
+| `header_email` | `string` | `nil` | Override the 42 email used in generated headers. Falls back to `vim.g.mail42`. |
+| `header_colors` | `table` | Rosé Pine-style defaults | Highlight groups and gradient colors for the visual 42 header layer. |
 | `auto_sort_includes` | `boolean` | `false` | Auto-sort contiguous `#include` blocks before saving `.c` and `.h` files. |
 | `auto_sort_defines` | `boolean` | `false` | Auto-sort contiguous simple `# define` blocks before saving `.c` and `.h` files. |
 | `auto_sort_prototypes` | `boolean` | `false` | Auto-sort contiguous function prototype blocks before saving `.h` files. |
@@ -129,4 +151,3 @@ Using [lazy.nvim]():
 * **Neovim 0.10+**
 * **Tree-sitter C parser**: Required for the extended `.c`/`.h` checks.
 * **Norminette**: Installed and accessible in your path.
-* **42 Header**: The `42header` plugin.

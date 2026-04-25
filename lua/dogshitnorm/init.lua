@@ -2,6 +2,7 @@ local config = require("dogshitnorm.config")
 local lint = require("dogshitnorm.lint")
 local makefile = require("dogshitnorm.makefile")
 local header = require("dogshitnorm.header")
+local header42 = require("dogshitnorm.header42")
 local fixes = require("dogshitnorm.fixes")
 local linecount = require("dogshitnorm.linecount")
 local linesavers = require("dogshitnorm.linesavers")
@@ -31,6 +32,7 @@ end
 
 function M.setup(opts)
 	local cfg = config.setup(opts)
+	header42.setup()
 
 	-- 1. Oil.nvim Integration
 	if cfg.auto_sync_makefile then
@@ -102,7 +104,50 @@ function M.setup(opts)
 		})
 	end
 
-	-- 3. Header Guard Auto-Insertion
+	-- 3. Native 42 Header support
+	if cfg.auto_42_header or cfg.update_42_header or cfg.header_style_enabled then
+		local header_group = vim.api.nvim_create_augroup("DogshitnormHeader42", { clear = true })
+
+		if cfg.auto_42_header then
+			vim.api.nvim_create_autocmd("BufNewFile", {
+				pattern = { "*.c", "*.h", "*.cpp", "*.hpp", "Makefile", "makefile" },
+				group = header_group,
+				callback = function(args)
+					vim.schedule(function()
+						header42.ensure(args.buf)
+						header42.refresh({ buf = args.buf })
+					end)
+				end,
+			})
+		end
+
+		if cfg.update_42_header then
+			vim.api.nvim_create_autocmd("BufWritePre", {
+				pattern = { "*.c", "*.h", "*.cpp", "*.hpp", "Makefile", "makefile" },
+				group = header_group,
+				callback = function(args)
+					header42.touch(args.buf)
+				end,
+			})
+		end
+
+		if cfg.header_style_enabled then
+			vim.api.nvim_create_autocmd({ "BufReadPost", "BufWritePost", "TextChanged", "InsertLeave" }, {
+				pattern = { "*.c", "*.h", "*.cpp", "*.hpp", "Makefile", "makefile" },
+				group = header_group,
+				callback = header42.refresh,
+			})
+			vim.api.nvim_create_autocmd("ColorScheme", {
+				group = header_group,
+				callback = function()
+					header42.setup()
+					header42.refresh()
+				end,
+			})
+		end
+	end
+
+	-- 4. Header Guard Auto-Insertion
 	if cfg.auto_header_guard then
 		local guard_group = vim.api.nvim_create_augroup("NorminetteAutoGuard", { clear = true })
 		vim.api.nvim_create_autocmd({ "BufWinEnter", "BufNewFile" }, {
@@ -123,7 +168,7 @@ function M.setup(opts)
 		})
 	end
 
-	-- 4. Include Sorting
+	-- 5. Include Sorting
 	if cfg.auto_sort_includes then
 		vim.api.nvim_create_autocmd("BufWritePre", {
 			pattern = { "*.c", "*.h" },
@@ -134,7 +179,7 @@ function M.setup(opts)
 		})
 	end
 
-	-- 5. Header Prototype Sorting
+	-- 6. Header Prototype Sorting
 	if cfg.auto_sort_defines then
 		vim.api.nvim_create_autocmd("BufWritePre", {
 			pattern = { "*.c", "*.h" },
@@ -155,12 +200,12 @@ function M.setup(opts)
 		})
 	end
 
-	-- 6. Function Line Counts
+	-- 7. Function Line Counts
 	if cfg.line_count_enabled then
 		linecount.enable()
 	end
 
-	-- 7. LSP Code Actions
+	-- 8. LSP Code Actions
 	if cfg.lsp_code_actions then
 		vim.api.nvim_create_autocmd({ "BufReadPost", "BufNewFile" }, {
 			pattern = { "*.c", "*.h", "Makefile", "makefile" },
@@ -175,10 +220,16 @@ function M.setup(opts)
 		end
 	end
 
-	-- 8. User Commands
+	-- 9. User Commands
 	vim.api.nvim_create_user_command("Makegen", makefile.generate, {})
 	vim.api.nvim_create_user_command("Makesync", function()
 		makefile.sync()
+	end, {})
+	vim.api.nvim_create_user_command("Stdheader", function()
+		header42.ensure()
+	end, {})
+	vim.api.nvim_create_user_command("HeaderToggle", function()
+		header42.toggle()
 	end, {})
 	vim.api.nvim_create_user_command("Makelib", function(opts)
 		makefile.convert_to_library(nil, opts.args)
@@ -215,7 +266,17 @@ function M.setup(opts)
 	end, {})
 	vim.api.nvim_create_user_command("Norminette", M.lint, {})
 
-	-- 9. Keymaps
+	-- 10. Keymaps
+	if cfg.header_keybinding then
+		vim.keymap.set("n", cfg.header_keybinding, function()
+			header42.ensure()
+		end, { silent = true, desc = "Insert or refresh 42 Header" })
+	end
+	if cfg.header_style_keybinding then
+		vim.keymap.set("n", cfg.header_style_keybinding, function()
+			header42.toggle()
+		end, { silent = true, desc = "Toggle 42 Header styling" })
+	end
 	if cfg.makefile_keybinding then
 		vim.keymap.set("n", cfg.makefile_keybinding, ":Makegen<CR>", { silent = true, desc = "Generate Makefile" })
 	end

@@ -1,0 +1,50 @@
+---
+title: "dogshitnorm.nvim"
+description: "Native 42 tooling for Neovim: norminette, quick fixes, headers, and Makefiles."
+template: splash
+hero:
+  tagline: One plugin for 42 headers, Makefiles, norminette diagnostics, and the small fixes you actually use every day.
+  actions:
+    - text: Getting Started
+      link: /guides/getting-started/
+      icon: right-arrow
+    - text: View on GitHub
+      link: https://github.com/0xveya/dogshitnorm.nvim
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## What it does
+
+<CardGrid stagger>
+	<Card title="Norminette" icon="report">
+		Run `norminette` asynchronously and show diagnostics directly in Neovim.
+	</Card>
+	<Card title="42 Headers" icon="paintbrush">
+		Insert, update, and visually style native 42 headers without depending on a separate header plugin.
+	</Card>
+	<Card title="Makefiles" icon="seti:makefile">
+		Generate 42-friendly Makefiles, sync explicit `SRCS`, toggle debug mode, and switch to static-library mode.
+	</Card>
+	<Card title="Quick Fixes" icon="pencil">
+		Apply header guard fixes, include sorting, prototype sorting, whitespace cleanup, and safe line-saving actions.
+	</Card>
+	<Card title="Configurable" icon="setting">
+		Keep it narrow with `active_dirs`, custom header identity, and Makefile exclusion rules like `libft`.
+	</Card>
+</CardGrid>
+
+## Included now
+
+- Native 42 header generation and save-time `Updated:` refresh
+- Header styling merged from `fancy-header.nvim`
+- Makefile dep-file support, library conversion, debug toggles, and status reporting
+- Built-in vim help in `:h dogshitnorm`
+
+## Next
+
+- Start with [Getting Started](./guides/getting-started/)
+- See [Configuration](./reference/configuration/)
+- Browse [Commands](./reference/commands/)
