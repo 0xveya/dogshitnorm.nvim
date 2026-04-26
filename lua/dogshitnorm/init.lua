@@ -135,7 +135,8 @@ function M.setup(opts)
 	end
 
 	-- 3. Native 42 Header support
-	if cfg.auto_42_header
+	if
+		cfg.auto_42_header
 		or cfg.update_42_header
 		or cfg.header_style_enabled
 		or cfg.header_hide_enabled
@@ -175,13 +176,16 @@ function M.setup(opts)
 		end
 
 		if cfg.header_style_enabled then
-			vim.api.nvim_create_autocmd({ "BufReadPost", "BufWritePost", "TextChanged", "InsertLeave", "BufWinEnter" }, {
-				pattern = { "*.c", "*.h", "*.cpp", "*.hpp", "Makefile", "makefile" },
-				group = header_group,
-				callback = function(args)
-					sync_header_views(args.buf)
-				end,
-			})
+			vim.api.nvim_create_autocmd(
+				{ "BufReadPost", "BufWritePost", "TextChanged", "InsertLeave", "BufWinEnter" },
+				{
+					pattern = { "*.c", "*.h", "*.cpp", "*.hpp", "Makefile", "makefile" },
+					group = header_group,
+					callback = function(args)
+						sync_header_views(args.buf)
+					end,
+				}
+			)
 			vim.api.nvim_create_autocmd("ColorScheme", {
 				group = header_group,
 				callback = function()
