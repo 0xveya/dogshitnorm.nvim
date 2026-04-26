@@ -12,6 +12,7 @@ description: Install dogshitnorm.nvim and replace separate 42 header plugins wit
 	opts = {
 		cmd = { "uv", "tool", "run", "norminette" },
 		args = { "--no-colors" },
+		norminette_use_gitignore = true,
 		active_dirs = { "~/coding/42" },
 	},
 }

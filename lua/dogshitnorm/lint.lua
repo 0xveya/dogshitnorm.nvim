@@ -56,6 +56,15 @@ local function command_has_format_arg(command)
 	return false
 end
 
+local function command_has_arg(command, expected)
+	for _, arg in ipairs(command) do
+		if arg == expected then
+			return true
+		end
+	end
+	return false
+end
+
 local function severity_from_norminette(level)
 	if level == "Warning" then
 		return vim.diagnostic.severity.WARN
@@ -110,16 +119,6 @@ local function parse_norminette_json(bufnr, output)
 	return parsed
 end
 
-local function parse_norminette_output(bufnr, obj)
-	local stdout = obj.stdout or ""
-	local stderr = obj.stderr or ""
-
-	return parse_norminette_json(bufnr, stdout)
-		or parse_norminette_json(bufnr, stderr)
-		or parse_norminette_human(bufnr, stdout)
-		or parse_norminette_human(bufnr, stderr)
-end
-
 local function parse_norminette_human(bufnr, stdout)
 	local parsed = {}
 	local clean_stdout = utils.strip_ansi(stdout or "")
@@ -140,6 +139,16 @@ local function parse_norminette_human(bufnr, stdout)
 		end
 	end
 	return parsed
+end
+
+local function parse_norminette_output(bufnr, obj)
+	local stdout = obj.stdout or ""
+	local stderr = obj.stderr or ""
+
+	return parse_norminette_json(bufnr, stdout)
+		or parse_norminette_json(bufnr, stderr)
+		or parse_norminette_human(bufnr, stdout)
+		or parse_norminette_human(bufnr, stderr)
 end
 
 local function has_duplicate_norminette_diagnostic(manual, norminette)
@@ -264,6 +273,9 @@ function M.lint(bufnr)
 		for _, arg in ipairs(cfg.args) do
 			table.insert(command, arg)
 		end
+	end
+	if cfg.norminette_use_gitignore and not command_has_arg(command, "--use-gitignore") then
+		table.insert(command, "--use-gitignore")
 	end
 	if cfg.norminette_format == "json" and not command_has_format_arg(command) then
 		table.insert(command, "-f")

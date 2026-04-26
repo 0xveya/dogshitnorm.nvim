@@ -48,6 +48,7 @@ Using [lazy.nvim]():
         -- Recommended: use 'uv' tool for a clean environment
         cmd = { "uv", "tool", "run", "norminette" },
         args = { "--no-colors" },
+        norminette_use_gitignore = true,
 
         -- General Settings
         keybinding = "<leader>cn",
@@ -120,6 +121,7 @@ Using [lazy.nvim]():
 | --- | --- | --- | --- |
 | `cmd` | `table` | `{"norminette"}` | The command to execute. |
 | `norminette_format` | `string` | `"json"` | Ask norminette for structured JSON output first. Falls back to human output parsing only if JSON is unavailable. |
+| `norminette_use_gitignore` | `boolean` | `true` | Pass `--use-gitignore` by default unless you already included it in `args`. |
 | `suppress_duplicate_diagnostics` | `boolean` | `true` | Hide Tree-sitter diagnostics when norminette already reported the same rule. |
 | `lsp_code_actions` | `boolean` | `true` | Start an in-process dogshitnorm LSP client that contributes code actions to `vim.lsp.buf.code_action()`. |
 | `auto_42_header` | `boolean` | `true` | Insert the standard 42 header automatically in new C-like files and Makefiles. |

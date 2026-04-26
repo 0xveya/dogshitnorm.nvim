@@ -45,6 +45,7 @@ With `lazy.nvim`:
   opts = {
     cmd = { "uv", "tool", "run", "norminette" },
     args = { "--no-colors" },
+    norminette_use_gitignore = true,
     active_dirs = { "~/coding/42" },
   },
 }
@@ -90,6 +91,8 @@ Common options:
 
 - `cmd`
 - `args`
+- `norminette_format`
+- `norminette_use_gitignore`
 - `active_dirs`
 - `keybinding`
 - `fix_keybinding`

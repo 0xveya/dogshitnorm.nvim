@@ -4,6 +4,7 @@ M.defaults = {
 	cmd = { "norminette" },
 	args = { "--no-colors" },
 	norminette_format = "json",
+	norminette_use_gitignore = true,
 	suppress_duplicate_diagnostics = true,
 	active = true,
 	active_dirs = nil,
