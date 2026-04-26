@@ -335,11 +335,11 @@ function M.setup(opts)
 		header.sort_prototypes(vim.api.nvim_get_current_buf())
 	end, {})
 	vim.api.nvim_create_user_command("Protoheader", function(cmd_opts)
-		local opts = {}
+		local proto_opts = {}
 		if cmd_opts.range > 0 then
-			opts.range = { cmd_opts.line1 - 1, cmd_opts.line2 - 1 }
+			proto_opts.range = { cmd_opts.line1 - 1, cmd_opts.line2 - 1 }
 		end
-		header.add_prototype_to_header(vim.api.nvim_get_current_buf(), opts)
+		header.add_prototype_to_header(vim.api.nvim_get_current_buf(), proto_opts)
 	end, {
 		range = true,
 	})
