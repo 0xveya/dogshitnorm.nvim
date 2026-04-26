@@ -135,6 +135,10 @@ local function is_hidden(bufnr)
 	return vim.b[bufnr][hidden_var] == true
 end
 
+local function should_remap_gg(bufnr)
+	return is_hidden(bufnr) or should_adjust_line_numbers()
+end
+
 local function normalize_bufnr(bufnr)
 	if bufnr == nil or bufnr == 0 then
 		return vim.api.nvim_get_current_buf()
@@ -442,6 +446,14 @@ local function clear_gg_map(bufnr)
 	vim.b[bufnr][gg_map_var] = false
 end
 
+local function sync_gg_map(bufnr)
+	if should_remap_gg(bufnr) and header_content_start_lnum(bufnr) ~= nil then
+		ensure_gg_map(bufnr)
+	else
+		clear_gg_map(bufnr)
+	end
+end
+
 local function apply_statuscolumn(winid, bufnr)
 	if not should_adjust_line_numbers() or header_content_start_lnum(bufnr) == nil then
 		restore_statuscolumn(winid)
@@ -449,25 +461,22 @@ local function apply_statuscolumn(winid, bufnr)
 	end
 
 	save_window_state(winid)
-	vim.wo[winid].statuscolumn = "%C%s%=%{v:lua.require'dogshitnorm.header42'.statuscolumn()}"
+	vim.wo[winid].statuscolumn = "%C%s%=%{v:lua.require'dogshitnorm.header42'.statuscolumn()} "
 end
 
 local function apply_hidden_fold(winid, bufnr)
 	if not is_hidden(bufnr) then
 		restore_fold(winid)
-		clear_gg_map(bufnr)
 		return
 	end
 
 	local content_start_lnum = header_content_start_lnum(bufnr)
 	if not content_start_lnum or content_start_lnum <= 1 then
 		restore_fold(winid)
-		clear_gg_map(bufnr)
 		return
 	end
 
 	save_window_state(winid)
-	ensure_gg_map(bufnr)
 
 	vim.wo[winid].foldmethod = "manual"
 	vim.wo[winid].foldenable = true
@@ -544,7 +553,7 @@ end
 
 function M.gg_expr()
 	local bufnr = vim.api.nvim_get_current_buf()
-	if not is_hidden(bufnr) then
+	if not should_remap_gg(bufnr) then
 		return "gg"
 	end
 
@@ -585,6 +594,7 @@ function M.sync_windows(bufnr)
 	end
 
 	ensure_buffer_state(bufnr)
+	sync_gg_map(bufnr)
 	local wins = vim.fn.win_findbuf(bufnr)
 	for _, winid in ipairs(wins) do
 		if vim.api.nvim_win_is_valid(winid) then
