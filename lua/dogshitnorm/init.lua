@@ -289,6 +289,12 @@ function M.setup(opts)
 	vim.api.nvim_create_user_command("Stdheader", function()
 		header42.ensure()
 	end, {})
+	vim.api.nvim_create_user_command("StdheaderAll", function(cmd_opts)
+		header42.ensure_all(cmd_opts.args)
+	end, {
+		nargs = "?",
+		complete = "dir",
+	})
 	vim.api.nvim_create_user_command("HeaderToggle", function()
 		header42.toggle()
 	end, {})

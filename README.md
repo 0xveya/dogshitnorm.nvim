@@ -97,6 +97,7 @@ Using [lazy.nvim]():
 
 * **Linting**: Save your file (`:w`) or press `<leader>cn`.
 * **42 Header**: Run `:Stdheader` or press `header_keybinding` to insert/refresh the native 42 header. Saving a file updates the `Updated:` line when enabled.
+* **Bulk Headers**: Run `:StdheaderAll [path]` to add or refresh 42 headers across a project tree in one shot.
 * **Header Styling**: Run `:HeaderToggle` or press `header_style_keybinding` to toggle the merged `fancy-header.nvim` visuals.
 * **Header Hiding**: Run `:HeaderHide [toggle|on|off]` or set `header_hide_enabled = true` to fold the real header out of the way while keeping it in the file for norminette. In that view, `gg` jumps to the first non-header line.
 * **Header-Relative Numbers**: Set `header_line_number_offset = true` to show gutter line numbers relative to the first non-header line instead of counting the 42 header.
@@ -118,7 +119,7 @@ Using [lazy.nvim]():
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
 | `cmd` | `table` | `{"norminette"}` | The command to execute. |
-| `norminette_format` | `string` | `"json"` | Ask norminette for structured JSON output. Falls back to human output parsing if JSON is unavailable. |
+| `norminette_format` | `string` | `"json"` | Ask norminette for structured JSON output first. Falls back to human output parsing only if JSON is unavailable. |
 | `suppress_duplicate_diagnostics` | `boolean` | `true` | Hide Tree-sitter diagnostics when norminette already reported the same rule. |
 | `lsp_code_actions` | `boolean` | `true` | Start an in-process dogshitnorm LSP client that contributes code actions to `vim.lsp.buf.code_action()`. |
 | `auto_42_header` | `boolean` | `true` | Insert the standard 42 header automatically in new C-like files and Makefiles. |

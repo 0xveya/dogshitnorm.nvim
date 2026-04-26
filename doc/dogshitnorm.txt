@@ -66,6 +66,8 @@ General:
 Headers:
 
 - `:Stdheader` inserts or refreshes the native 42 header
+- `:StdheaderAll [path]` inserts or refreshes 42 headers recursively under a
+  project tree
 - `:HeaderToggle` toggles visual header styling
 - `:HeaderHide [toggle|on|off]` folds the real header out of the current
   window while keeping it in the file

@@ -79,14 +79,21 @@ local function decode_norminette_json(stdout)
 	return nil
 end
 
-local function parse_norminette_json(bufnr, stdout)
-	local decoded = decode_norminette_json(stdout)
+local function iter_json_files(files)
+	if vim.islist(files) then
+		return ipairs(files)
+	end
+	return pairs(files)
+end
+
+local function parse_norminette_json(bufnr, output)
+	local decoded = decode_norminette_json(output)
 	if not decoded or type(decoded.files) ~= "table" then
 		return nil
 	end
 
 	local parsed = {}
-	for _, file in ipairs(decoded.files) do
+	for _, file in iter_json_files(decoded.files) do
 		for _, err in ipairs(file.errors or {}) do
 			local highlight = err.highlights and err.highlights[1] or {}
 			table.insert(parsed, {
@@ -101,6 +108,16 @@ local function parse_norminette_json(bufnr, stdout)
 		end
 	end
 	return parsed
+end
+
+local function parse_norminette_output(bufnr, obj)
+	local stdout = obj.stdout or ""
+	local stderr = obj.stderr or ""
+
+	return parse_norminette_json(bufnr, stdout)
+		or parse_norminette_json(bufnr, stderr)
+		or parse_norminette_human(bufnr, stdout)
+		or parse_norminette_human(bufnr, stderr)
 end
 
 local function parse_norminette_human(bufnr, stdout)
@@ -266,8 +283,7 @@ function M.lint(bufnr)
 			return
 		end
 
-		local norminette_diagnostics = parse_norminette_json(target_bufnr, obj.stdout)
-			or parse_norminette_human(target_bufnr, obj.stdout)
+		local norminette_diagnostics = parse_norminette_output(target_bufnr, obj)
 		local merged_diagnostics =
 			merge_diagnostics(manual_diagnostics, norminette_diagnostics, cfg.suppress_duplicate_diagnostics)
 

@@ -14,6 +14,7 @@ description: Exposed commands and their intended use.
 ## Header commands
 
 - `:Stdheader`
+- `:StdheaderAll [path]`
 - `:HeaderToggle`
 - `:HeaderHide [toggle|on|off]`
 - `:Includesort`

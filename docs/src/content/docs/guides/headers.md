@@ -18,6 +18,7 @@ It no longer needs `42Paris/42header` for this workflow.
 ## Commands
 
 - `:Stdheader` inserts or refreshes the header in the current buffer
+- `:StdheaderAll [path]` inserts or refreshes headers recursively for supported files under a project tree
 - `:HeaderToggle` toggles the visual styling layer
 - `:HeaderHide [toggle|on|off]` folds the real header out of the active window while keeping it in the file
 

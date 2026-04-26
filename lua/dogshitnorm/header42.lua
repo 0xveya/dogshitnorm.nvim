@@ -71,6 +71,10 @@ local function in_active_dir(bufnr)
 	return utils.is_in_active_dir(filepath, cfg.active_dirs)
 end
 
+local function is_supported_path(path)
+	return path:match("[Mm]akefile$") or path:match("%.[ch]$") or path:match("%.[ch]pp$")
+end
+
 local function get_win_var(winid, name)
 	local ok, value = pcall(vim.api.nvim_win_get_var, winid, name)
 	if ok then
@@ -521,6 +525,108 @@ function M.ensure_new_buffer(bufnr)
 	end
 
 	return M.ensure(bufnr)
+end
+
+local function resolve_bulk_root(path)
+	local target = path
+	if type(target) ~= "string" or target == "" then
+		target = vim.api.nvim_buf_get_name(vim.api.nvim_get_current_buf())
+	end
+	if type(target) ~= "string" or target == "" then
+		target = vim.fn.getcwd()
+	end
+
+	local expanded = vim.fn.expand(target)
+	if vim.fn.isdirectory(expanded) == 0 then
+		local project_root = utils.find_project_root(expanded)
+		if project_root then
+			return project_root
+		end
+		return vim.fn.fnamemodify(expanded, ":h")
+	end
+	return utils.normalize_path(expanded)
+end
+
+local function collect_bulk_targets(root)
+	local matches = {}
+	local patterns = {
+		"Makefile",
+		"makefile",
+		"**/*.c",
+		"**/*.h",
+		"**/*.cpp",
+		"**/*.hpp",
+		"**/Makefile",
+		"**/makefile",
+	}
+
+	for _, pattern in ipairs(patterns) do
+		vim.list_extend(matches, vim.fn.globpath(root, pattern, false, true))
+	end
+	local files = {}
+	local seen = {}
+
+	for _, match in ipairs(matches) do
+		local filepath = utils.normalize_path(match)
+		if not seen[filepath] and vim.fn.filereadable(filepath) == 1 and is_supported_path(filepath) then
+			seen[filepath] = true
+			table.insert(files, filepath)
+		end
+	end
+
+	table.sort(files)
+	return files
+end
+
+function M.ensure_all(path)
+	local root = resolve_bulk_root(path)
+	if vim.fn.isdirectory(root) == 0 then
+		vim.notify("dogshitnorm: bulk header root is not a directory: " .. root, vim.log.levels.WARN)
+		return false
+	end
+	if not utils.is_in_active_dir(root, config.get().active_dirs) then
+		vim.notify("dogshitnorm: bulk header root is outside active_dirs: " .. root, vim.log.levels.WARN)
+		return false
+	end
+
+	local changed = 0
+	local skipped = 0
+	local failed = 0
+
+	for _, filepath in ipairs(collect_bulk_targets(root)) do
+		local bufnr = vim.fn.bufadd(filepath)
+		vim.fn.bufload(bufnr)
+
+		if vim.bo[bufnr].modified then
+			skipped = skipped + 1
+		else
+			local ok = pcall(M.ensure, bufnr)
+			if not ok then
+				failed = failed + 1
+			else
+				local write_ok = pcall(vim.api.nvim_buf_call, bufnr, function()
+					vim.cmd("silent update")
+				end)
+				if write_ok then
+					changed = changed + 1
+				else
+					failed = failed + 1
+				end
+			end
+		end
+	end
+
+	vim.notify(
+		string.format(
+			"dogshitnorm: bulk header refresh finished for %s (%d changed, %d skipped, %d failed)",
+			root,
+			changed,
+			skipped,
+			failed
+		),
+		failed > 0 and vim.log.levels.WARN or vim.log.levels.INFO
+	)
+	return failed == 0
 end
 
 function M.statuscolumn()
