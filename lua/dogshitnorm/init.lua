@@ -334,6 +334,15 @@ function M.setup(opts)
 	vim.api.nvim_create_user_command("Protosort", function()
 		header.sort_prototypes(vim.api.nvim_get_current_buf())
 	end, {})
+	vim.api.nvim_create_user_command("Protoheader", function(cmd_opts)
+		local opts = {}
+		if cmd_opts.range > 0 then
+			opts.range = { cmd_opts.line1 - 1, cmd_opts.line2 - 1 }
+		end
+		header.add_prototype_to_header(vim.api.nvim_get_current_buf(), opts)
+	end, {
+		range = true,
+	})
 	vim.api.nvim_create_user_command("NormFix", function()
 		fixes.fix(vim.api.nvim_get_current_buf())
 	end, {})
@@ -372,6 +381,14 @@ function M.setup(opts)
 		vim.keymap.set("n", cfg.guard_keybinding, function()
 			header.add_header_guard(vim.api.nvim_get_current_buf())
 		end, { desc = "Insert 42 Header Guards" })
+	end
+	if cfg.prototype_header_keybinding then
+		vim.keymap.set("n", cfg.prototype_header_keybinding, function()
+			header.add_prototype_to_header(vim.api.nvim_get_current_buf())
+		end, { silent = true, desc = "Send current function prototype to header" })
+		vim.keymap.set("x", cfg.prototype_header_keybinding, function()
+			header.add_prototype_to_header(vim.api.nvim_get_current_buf(), { use_visual_selection = true })
+		end, { silent = true, desc = "Send selected function prototype to header" })
 	end
 	if cfg.keybinding then
 		vim.keymap.set("n", cfg.keybinding, M.lint, { desc = "Lint with Norminette" })

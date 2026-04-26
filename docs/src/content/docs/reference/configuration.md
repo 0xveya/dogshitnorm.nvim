@@ -19,6 +19,7 @@ description: dogshitnorm.nvim options.
 - `auto_header_guard`
 - `guard_keybinding`
 - `header_keybinding`
+- `prototype_header_keybinding`
 - `header_style_enabled`
 - `header_style_keybinding`
 - `header_hide_enabled`

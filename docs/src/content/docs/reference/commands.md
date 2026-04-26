@@ -17,6 +17,7 @@ description: Exposed commands and their intended use.
 - `:StdheaderAll [path]`
 - `:HeaderToggle`
 - `:HeaderHide [toggle|on|off]`
+- `:Protoheader`
 - `:Includesort`
 - `:Definesort`
 - `:Protosort`

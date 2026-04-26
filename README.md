@@ -59,6 +59,7 @@ Using [lazy.nvim]():
         update_42_header = true,
         auto_header_guard = true,
         header_keybinding = "<leader>42",
+        prototype_header_keybinding = "<leader>cp",
         header_style_keybinding = "<leader>4h",
         header_hide_enabled = false,
         header_hide_keybinding = nil,
@@ -106,6 +107,7 @@ Using [lazy.nvim]():
 * **Include Sorting**: Run `:Includesort` inside a `.c` or `.h` file to sort contiguous include blocks. Set `auto_sort_includes = true` to run this automatically before saving C and header files.
 * **Define Sorting**: Run `:Definesort` inside a `.c` or `.h` file to sort contiguous simple define blocks. Set `auto_sort_defines = true` to run this automatically before saving C and header files.
 * **Prototype Sorting**: Run `:Protosort` inside a `.h` file to sort contiguous function prototype blocks. Set `auto_sort_prototypes = true` to run this automatically before saving headers.
+* **Prototype Export**: Put the cursor inside a `.c` function or visually select it, then run `:Protoheader` or press `prototype_header_keybinding` to insert its single-line prototype into the resolved header file and save that header.
 * **Line Counts**: Run `:NormLineCounts` or press `line_count_keybinding` to toggle virtual line count overlays above `.c` functions.
 * **Line Savers**: Run `:NormLineSavers` or use LSP code actions inside a `.c` function. Actions can remove extra blank lines inside the current function, combine an expression directly followed by a return with the comma operator, move simple `s++`/`s--` loop increments into a nearby `*s` expression, or fold a single-line `while (...)` body increment into `while ((...) && (s++, 1));`. The required declaration/code separator blank line is not offered as removable. More complex while-loop counter patterns are still listed as suggestions instead of being applied blindly.
 * **Quick Fixes**: Use Neovim's `vim.lsp.buf.code_action()` (`gra` by default on current Neovim) on a diagnostic line, run `:NormFix`, or run `:NormFixAll` to repair safe file-level issues such as header guards, include/define/prototype order, Makefile sources, whitespace, return parentheses, missing `void`, function spacing, overlong-function line savers, and snake_case naming.
@@ -128,6 +130,7 @@ Using [lazy.nvim]():
 | `update_42_header` | `boolean` | `true` | Refresh the `Updated:` timestamp on save when a 42 header is present. |
 | `auto_header_guard` | `boolean` | `true` | Auto-insert guards in `.h` files. |
 | `header_keybinding` | `string` | `"<leader>42"` | Keymap to insert or refresh the 42 header. |
+| `prototype_header_keybinding` | `string` | `"<leader>cp"` | Normal/visual keymap to send a function prototype into the resolved header file. |
 | `header_style_enabled` | `boolean` | `true` | Apply merged `fancy-header.nvim` visual styling to 42 headers. |
 | `header_style_keybinding` | `string` | `"<leader>4h"` | Keymap to toggle header styling. |
 | `header_hide_enabled` | `boolean` | `false` | Fold the 42 header out of the active window while keeping it in the file. |

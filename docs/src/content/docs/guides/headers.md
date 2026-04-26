@@ -21,6 +21,7 @@ It no longer needs `42Paris/42header` for this workflow.
 - `:StdheaderAll [path]` inserts or refreshes headers recursively for supported files under a project tree
 - `:HeaderToggle` toggles the visual styling layer
 - `:HeaderHide [toggle|on|off]` folds the real header out of the active window while keeping it in the file
+- `:Protoheader` inserts the selected or current `.c` function prototype into the resolved header file
 
 ## Save-time update
 
@@ -53,6 +54,7 @@ Use these options if you want the header to stay in the file for norminette, but
 ```lua
 header_hide_enabled = true,
 header_hide_keybinding = "<leader>4H",
+prototype_header_keybinding = "<leader>cp",
 header_line_number_offset = true,
 ```
 

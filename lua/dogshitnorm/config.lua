@@ -33,6 +33,7 @@ M.defaults = {
 	debug_log_path = nil,
 	guard_keybinding = "<leader>ch",
 	header_keybinding = "<leader>42",
+	prototype_header_keybinding = "<leader>cp",
 	header_style_keybinding = "<leader>4h",
 	header_hide_enabled = false,
 	header_hide_keybinding = nil,

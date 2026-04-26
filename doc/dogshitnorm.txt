@@ -72,6 +72,8 @@ Headers:
 - `:HeaderToggle` toggles visual header styling
 - `:HeaderHide [toggle|on|off]` folds the real header out of the current
   window while keeping it in the file
+- `:Protoheader` inserts the selected or current C function prototype into the
+  resolved header file
 - `:Includesort`
 - `:Definesort`
 - `:Protosort`
@@ -103,6 +105,7 @@ Header options:
 - `auto_42_header`
 - `update_42_header`
 - `header_keybinding`
+- `prototype_header_keybinding`
 - `header_style_enabled`
 - `header_style_keybinding`
 - `header_hide_enabled`
