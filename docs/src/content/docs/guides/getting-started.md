@@ -35,7 +35,7 @@ vim.g.mail42 = "sfurst@student.42vienna.com"
 ## Default workflow
 
 - Open a new `.c`, `.h`, `.cpp`, `.hpp`, or `Makefile` buffer inside an active 42 directory.
-- The plugin inserts the native 42 header automatically.
+- The plugin inserts the native 42 header automatically, even when the plugin was lazy-loaded on filetype after the new buffer was already opened.
 - Saving refreshes the `Updated:` line.
 - `:Makesync` keeps `SRCS` in sync with `SRC_DIR`.
 - `:NormFix` and LSP code actions apply safe file-level fixes.
@@ -49,4 +49,3 @@ If you previously used:
 - a manual `Stdheader` autocommand
 
 you can remove them and keep only `dogshitnorm.nvim`.
-

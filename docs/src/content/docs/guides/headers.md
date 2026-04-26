@@ -19,6 +19,7 @@ It no longer needs `42Paris/42header` for this workflow.
 
 - `:Stdheader` inserts or refreshes the header in the current buffer
 - `:HeaderToggle` toggles the visual styling layer
+- `:HeaderHide [toggle|on|off]` folds the real header out of the active window while keeping it in the file
 
 ## Save-time update
 
@@ -44,3 +45,14 @@ header_colors = {
 }
 ```
 
+## Hidden view and line numbers
+
+Use these options if you want the header to stay in the file for norminette, but not get in your way while editing:
+
+```lua
+header_hide_enabled = true,
+header_hide_keybinding = "<leader>4H",
+header_line_number_offset = true,
+```
+
+With `header_hide_enabled = true`, the header is folded out of the current window and buffer-local `gg` jumps to the first non-header line. With `header_line_number_offset = true`, gutter numbers start at `1` on the first non-header line instead of counting the 42 header.

@@ -34,6 +34,36 @@ function M.setup(opts)
 	local cfg = config.setup(opts)
 	header42.setup()
 
+	local function sync_header_views(bufnr)
+		vim.schedule(function()
+			if vim.api.nvim_buf_is_valid(bufnr) then
+				header42.refresh({ buf = bufnr })
+			end
+		end)
+	end
+
+	local function ensure_new_header(bufnr)
+		vim.schedule(function()
+			if not vim.api.nvim_buf_is_valid(bufnr) then
+				return
+			end
+			if not cfg.auto_42_header then
+				header42.sync_windows(bufnr)
+				return
+			end
+			if not header42.ensure_new_buffer(bufnr) then
+				header42.sync_windows(bufnr)
+				return
+			end
+			if cfg.auto_header_guard then
+				header.add_header_guard(bufnr)
+			end
+			header42.refresh({ buf = bufnr })
+		end)
+	end
+
+	ensure_new_header(vim.api.nvim_get_current_buf())
+
 	-- 1. Oil.nvim Integration
 	if cfg.auto_sync_makefile then
 		local oil_group = vim.api.nvim_create_augroup("NorminetteOilSync", { clear = true })
@@ -105,7 +135,12 @@ function M.setup(opts)
 	end
 
 	-- 3. Native 42 Header support
-	if cfg.auto_42_header or cfg.update_42_header or cfg.header_style_enabled then
+	if cfg.auto_42_header
+		or cfg.update_42_header
+		or cfg.header_style_enabled
+		or cfg.header_hide_enabled
+		or cfg.header_line_number_offset
+	then
 		local header_group = vim.api.nvim_create_augroup("DogshitnormHeader42", { clear = true })
 
 		if cfg.auto_42_header then
@@ -117,6 +152,14 @@ function M.setup(opts)
 						header42.ensure(args.buf)
 						header42.refresh({ buf = args.buf })
 					end)
+				end,
+			})
+
+			vim.api.nvim_create_autocmd({ "BufEnter", "BufWinEnter" }, {
+				pattern = { "*.c", "*.h", "*.cpp", "*.hpp", "Makefile", "makefile" },
+				group = header_group,
+				callback = function(args)
+					ensure_new_header(args.buf)
 				end,
 			})
 		end
@@ -132,16 +175,30 @@ function M.setup(opts)
 		end
 
 		if cfg.header_style_enabled then
-			vim.api.nvim_create_autocmd({ "BufReadPost", "BufWritePost", "TextChanged", "InsertLeave" }, {
+			vim.api.nvim_create_autocmd({ "BufReadPost", "BufWritePost", "TextChanged", "InsertLeave", "BufWinEnter" }, {
 				pattern = { "*.c", "*.h", "*.cpp", "*.hpp", "Makefile", "makefile" },
 				group = header_group,
-				callback = header42.refresh,
+				callback = function(args)
+					sync_header_views(args.buf)
+				end,
 			})
 			vim.api.nvim_create_autocmd("ColorScheme", {
 				group = header_group,
 				callback = function()
 					header42.setup()
 					header42.refresh()
+				end,
+			})
+		elseif cfg.header_hide_enabled or cfg.header_line_number_offset then
+			vim.api.nvim_create_autocmd({ "BufReadPost", "BufWritePost", "BufWinEnter" }, {
+				pattern = { "*.c", "*.h", "*.cpp", "*.hpp", "Makefile", "makefile" },
+				group = header_group,
+				callback = function(args)
+					vim.schedule(function()
+						if vim.api.nvim_buf_is_valid(args.buf) then
+							header42.sync_windows(args.buf)
+						end
+					end)
 				end,
 			})
 		end
@@ -231,6 +288,19 @@ function M.setup(opts)
 	vim.api.nvim_create_user_command("HeaderToggle", function()
 		header42.toggle()
 	end, {})
+	vim.api.nvim_create_user_command("HeaderHide", function(cmd_opts)
+		local mode = cmd_opts.args
+		if mode == "" or mode == "toggle" then
+			header42.set_hidden(nil)
+			return
+		end
+		header42.set_hidden(mode == "on")
+	end, {
+		nargs = "?",
+		complete = function()
+			return { "toggle", "on", "off" }
+		end,
+	})
 	vim.api.nvim_create_user_command("Makelib", function(cmd_opts)
 		makefile.convert_to_library(nil, cmd_opts.args)
 	end, { nargs = "?" })
@@ -276,6 +346,11 @@ function M.setup(opts)
 		vim.keymap.set("n", cfg.header_style_keybinding, function()
 			header42.toggle()
 		end, { silent = true, desc = "Toggle 42 Header styling" })
+	end
+	if cfg.header_hide_keybinding then
+		vim.keymap.set("n", cfg.header_hide_keybinding, function()
+			header42.set_hidden(nil)
+		end, { silent = true, desc = "Toggle hidden 42 header view" })
 	end
 	if cfg.makefile_keybinding then
 		vim.keymap.set("n", cfg.makefile_keybinding, ":Makegen<CR>", { silent = true, desc = "Generate Makefile" })

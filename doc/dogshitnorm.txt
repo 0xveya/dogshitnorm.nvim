@@ -67,6 +67,8 @@ Headers:
 
 - `:Stdheader` inserts or refreshes the native 42 header
 - `:HeaderToggle` toggles visual header styling
+- `:HeaderHide [toggle|on|off]` folds the real header out of the current
+  window while keeping it in the file
 - `:Includesort`
 - `:Definesort`
 - `:Protosort`
@@ -98,6 +100,9 @@ Header options:
 - `header_keybinding`
 - `header_style_enabled`
 - `header_style_keybinding`
+- `header_hide_enabled`
+- `header_hide_keybinding`
+- `header_line_number_offset`
 - `header_user`
 - `header_email`
 - `header_colors`
@@ -154,5 +159,11 @@ The `Updated:` line is refreshed on save when `update_42_header = true`.
 
 The visual styling previously provided by `fancy-header.nvim` is included in
 dogshitnorm itself and toggled with `:HeaderToggle`.
+
+If `header_hide_enabled = true`, the current window folds the header out of
+the way while keeping it in the file for norminette, and buffer-local `gg`
+jumps to the first non-header line in that view. With
+`header_line_number_offset = true`, displayed line numbers start at `1` on the
+first non-header line instead of counting the 42 header.
 
 vim:tw=78:ts=8:noet:ft=help:norl:

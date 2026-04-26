@@ -4,6 +4,15 @@ local utils = require("dogshitnorm.utils")
 local M = {}
 
 local ns_id = vim.api.nvim_create_namespace("dogshitnorm_header42")
+local hidden_var = "dogshitnorm_header42_hidden"
+local hidden_init_var = "dogshitnorm_header42_hidden_init"
+local gg_map_var = "dogshitnorm_header42_gg_map"
+local saved_statuscolumn_var = "dogshitnorm_header42_saved_statuscolumn"
+local saved_foldmethod_var = "dogshitnorm_header42_saved_foldmethod"
+local saved_foldenable_var = "dogshitnorm_header42_saved_foldenable"
+local saved_foldlevel_var = "dogshitnorm_header42_saved_foldlevel"
+local saved_foldtext_var = "dogshitnorm_header42_saved_foldtext"
+local header_bounds
 
 local C_TOP = "/* ************************************************************************** */"
 local C_BLANK = "/*                                                                            */"
@@ -60,6 +69,77 @@ local function in_active_dir(bufnr)
 	local cfg = config.get()
 	local filepath = vim.api.nvim_buf_get_name(bufnr)
 	return utils.is_in_active_dir(filepath, cfg.active_dirs)
+end
+
+local function get_win_var(winid, name)
+	local ok, value = pcall(vim.api.nvim_win_get_var, winid, name)
+	if ok then
+		return value
+	end
+	return nil
+end
+
+local function set_win_var(winid, name, value)
+	pcall(vim.api.nvim_win_set_var, winid, name, value)
+end
+
+local function del_win_var(winid, name)
+	pcall(vim.api.nvim_win_del_var, winid, name)
+end
+
+local function ensure_buffer_state(bufnr)
+	if vim.b[bufnr][hidden_init_var] then
+		return
+	end
+
+	vim.b[bufnr][hidden_var] = config.get().header_hide_enabled or false
+	vim.b[bufnr][hidden_init_var] = true
+end
+
+local function header_content_start_row(bufnr)
+	local _, end_row = header_bounds(bufnr)
+	if end_row == nil then
+		return nil
+	end
+
+	local row = end_row
+	local line_count = vim.api.nvim_buf_line_count(bufnr)
+	while row < line_count do
+		local line = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1] or ""
+		if line ~= "" then
+			break
+		end
+		row = row + 1
+	end
+	return row
+end
+
+local function header_content_start_lnum(bufnr)
+	local row = header_content_start_row(bufnr)
+	if row == nil then
+		return nil
+	end
+	return row + 1
+end
+
+local function header_display_offset(bufnr)
+	return header_content_start_row(bufnr) or 0
+end
+
+local function should_adjust_line_numbers()
+	return config.get().header_line_number_offset == true
+end
+
+local function is_hidden(bufnr)
+	ensure_buffer_state(bufnr)
+	return vim.b[bufnr][hidden_var] == true
+end
+
+local function normalize_bufnr(bufnr)
+	if bufnr == nil or bufnr == 0 then
+		return vim.api.nvim_get_current_buf()
+	end
+	return bufnr
 end
 
 local function hex_to_rgb(hex)
@@ -158,7 +238,7 @@ local function header_lines(bufnr, created_at, updated_at)
 	}
 end
 
-local function header_bounds(bufnr)
+header_bounds = function(bufnr)
 	local kind = resolve_kind(bufnr)
 	if not kind then
 		return nil
@@ -218,7 +298,7 @@ local function ensure_blank_after_header(bufnr)
 end
 
 function M.ensure(bufnr)
-	bufnr = bufnr or vim.api.nvim_get_current_buf()
+	bufnr = normalize_bufnr(bufnr)
 	if not vim.api.nvim_buf_is_valid(bufnr) or not is_supported(bufnr) or not in_active_dir(bufnr) then
 		return false
 	end
@@ -234,6 +314,7 @@ function M.ensure(bufnr)
 	if start_row ~= nil then
 		vim.api.nvim_buf_set_lines(bufnr, start_row, end_row, false, lines)
 		ensure_blank_after_header(bufnr)
+		M.sync_windows(bufnr)
 		return true
 	end
 
@@ -245,11 +326,12 @@ function M.ensure(bufnr)
 	table.insert(new_lines, "")
 	vim.list_extend(new_lines, existing)
 	vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, new_lines)
+	M.sync_windows(bufnr)
 	return true
 end
 
 function M.touch(bufnr)
-	bufnr = bufnr or vim.api.nvim_get_current_buf()
+	bufnr = normalize_bufnr(bufnr)
 	if not vim.api.nvim_buf_is_valid(bufnr) or not is_supported(bufnr) or not in_active_dir(bufnr) then
 		return false
 	end
@@ -271,6 +353,245 @@ function M.touch(bufnr)
 	local lines = header_lines(bufnr, created_at, updated_at)
 	join_undo(bufnr)
 	vim.api.nvim_buf_set_lines(bufnr, 0, 11, false, lines)
+	M.sync_windows(bufnr)
+	return true
+end
+
+local function save_window_state(winid)
+	if get_win_var(winid, saved_statuscolumn_var) == nil then
+		set_win_var(winid, saved_statuscolumn_var, vim.wo[winid].statuscolumn)
+	end
+	if get_win_var(winid, saved_foldmethod_var) == nil then
+		set_win_var(winid, saved_foldmethod_var, vim.wo[winid].foldmethod)
+	end
+	if get_win_var(winid, saved_foldenable_var) == nil then
+		set_win_var(winid, saved_foldenable_var, vim.wo[winid].foldenable)
+	end
+	if get_win_var(winid, saved_foldlevel_var) == nil then
+		set_win_var(winid, saved_foldlevel_var, vim.wo[winid].foldlevel)
+	end
+	if get_win_var(winid, saved_foldtext_var) == nil then
+		set_win_var(winid, saved_foldtext_var, vim.wo[winid].foldtext)
+	end
+end
+
+local function restore_statuscolumn(winid)
+	local saved = get_win_var(winid, saved_statuscolumn_var)
+	if saved ~= nil then
+		vim.wo[winid].statuscolumn = saved
+		del_win_var(winid, saved_statuscolumn_var)
+	end
+end
+
+local function restore_fold(winid)
+	local saved_method = get_win_var(winid, saved_foldmethod_var)
+	local saved_enable = get_win_var(winid, saved_foldenable_var)
+	local saved_level = get_win_var(winid, saved_foldlevel_var)
+	local saved_text = get_win_var(winid, saved_foldtext_var)
+
+	if saved_method == nil and saved_enable == nil and saved_level == nil and saved_text == nil then
+		return
+	end
+
+	vim.api.nvim_win_call(winid, function()
+		local view = vim.fn.winsaveview()
+		vim.cmd("silent! keepjumps normal! zE")
+		vim.fn.winrestview(view)
+	end)
+
+	if saved_method ~= nil then
+		vim.wo[winid].foldmethod = saved_method
+		del_win_var(winid, saved_foldmethod_var)
+	end
+	if saved_enable ~= nil then
+		vim.wo[winid].foldenable = saved_enable
+		del_win_var(winid, saved_foldenable_var)
+	end
+	if saved_level ~= nil then
+		vim.wo[winid].foldlevel = saved_level
+		del_win_var(winid, saved_foldlevel_var)
+	end
+	if saved_text ~= nil then
+		vim.wo[winid].foldtext = saved_text
+		del_win_var(winid, saved_foldtext_var)
+	end
+end
+
+local function ensure_gg_map(bufnr)
+	if vim.b[bufnr][gg_map_var] then
+		return
+	end
+
+	vim.keymap.set("n", "gg", function()
+		return require("dogshitnorm.header42").gg_expr()
+	end, {
+		buffer = bufnr,
+		expr = true,
+		silent = true,
+		desc = "Jump to first visible line after hidden 42 header",
+	})
+	vim.b[bufnr][gg_map_var] = true
+end
+
+local function clear_gg_map(bufnr)
+	if not vim.b[bufnr][gg_map_var] then
+		return
+	end
+
+	pcall(vim.keymap.del, "n", "gg", { buffer = bufnr })
+	vim.b[bufnr][gg_map_var] = false
+end
+
+local function apply_statuscolumn(winid, bufnr)
+	if not should_adjust_line_numbers() or header_content_start_lnum(bufnr) == nil then
+		restore_statuscolumn(winid)
+		return
+	end
+
+	save_window_state(winid)
+	vim.wo[winid].statuscolumn = "%C%s%=%{v:lua.require'dogshitnorm.header42'.statuscolumn()}"
+end
+
+local function apply_hidden_fold(winid, bufnr)
+	if not is_hidden(bufnr) then
+		restore_fold(winid)
+		clear_gg_map(bufnr)
+		return
+	end
+
+	local content_start_lnum = header_content_start_lnum(bufnr)
+	if not content_start_lnum or content_start_lnum <= 1 then
+		restore_fold(winid)
+		clear_gg_map(bufnr)
+		return
+	end
+
+	save_window_state(winid)
+	ensure_gg_map(bufnr)
+
+	vim.wo[winid].foldmethod = "manual"
+	vim.wo[winid].foldenable = true
+	vim.wo[winid].foldlevel = 0
+	vim.wo[winid].foldtext = "v:lua.require'dogshitnorm.header42'.foldtext()"
+
+	vim.api.nvim_win_call(winid, function()
+		local view = vim.fn.winsaveview()
+		vim.api.nvim_win_set_cursor(winid, { 1, 0 })
+		vim.cmd("silent! keepjumps normal! zD")
+		vim.cmd(string.format("silent! keepjumps 1,%dfold", content_start_lnum - 1))
+		vim.cmd("silent! keepjumps normal! zc")
+
+		if view.lnum < content_start_lnum then
+			view.lnum = content_start_lnum
+		end
+		if view.topline < content_start_lnum then
+			view.topline = content_start_lnum
+		end
+		vim.fn.winrestview(view)
+	end)
+end
+
+function M.ensure_new_buffer(bufnr)
+	bufnr = normalize_bufnr(bufnr)
+	if not vim.api.nvim_buf_is_valid(bufnr) or not is_supported(bufnr) or not in_active_dir(bufnr) then
+		return false
+	end
+
+	if vim.bo[bufnr].buftype ~= "" then
+		return false
+	end
+
+	local filepath = vim.api.nvim_buf_get_name(bufnr)
+	if filepath == "" or vim.fn.filereadable(filepath) == 1 or header_bounds(bufnr) ~= nil then
+		return false
+	end
+
+	local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+	if #lines ~= 1 or lines[1] ~= "" or vim.bo[bufnr].modified then
+		return false
+	end
+
+	return M.ensure(bufnr)
+end
+
+function M.statuscolumn()
+	local bufnr = vim.api.nvim_get_current_buf()
+	local offset = header_display_offset(bufnr)
+	local width = math.max(vim.wo.numberwidth, #tostring(math.max(1, vim.api.nvim_buf_line_count(bufnr) - offset)))
+
+	if vim.v.virtnum ~= 0 or (not vim.wo.number and not vim.wo.relativenumber) then
+		return string.rep(" ", width)
+	end
+
+	local actual = vim.v.lnum
+	if actual <= offset then
+		return string.rep(" ", width)
+	end
+
+	local text
+	if vim.wo.relativenumber and vim.v.relnum ~= 0 then
+		text = tostring(vim.v.relnum)
+	else
+		text = tostring(actual - offset)
+	end
+
+	return string.rep(" ", math.max(0, width - #text)) .. text
+end
+
+function M.foldtext()
+	return string.format("42 header (%d lines)", vim.v.foldend - vim.v.foldstart + 1)
+end
+
+function M.gg_expr()
+	local bufnr = vim.api.nvim_get_current_buf()
+	if not is_hidden(bufnr) then
+		return "gg"
+	end
+
+	local content_start_lnum = header_content_start_lnum(bufnr)
+	if not content_start_lnum then
+		return "gg"
+	end
+
+	local count = vim.v.count
+	if count == 0 then
+		return tostring(content_start_lnum) .. "G0"
+	end
+	return tostring(content_start_lnum + count - 1) .. "G0"
+end
+
+function M.set_hidden(mode, bufnr)
+	bufnr = normalize_bufnr(bufnr)
+	if not vim.api.nvim_buf_is_valid(bufnr) then
+		return false
+	end
+
+	ensure_buffer_state(bufnr)
+
+	local hidden = mode
+	if hidden == nil then
+		hidden = not is_hidden(bufnr)
+	end
+
+	vim.b[bufnr][hidden_var] = hidden == true
+	M.sync_windows(bufnr)
+	return vim.b[bufnr][hidden_var]
+end
+
+function M.sync_windows(bufnr)
+	bufnr = normalize_bufnr(bufnr)
+	if not vim.api.nvim_buf_is_valid(bufnr) then
+		return false
+	end
+
+	ensure_buffer_state(bufnr)
+	local wins = vim.fn.win_findbuf(bufnr)
+	for _, winid in ipairs(wins) do
+		if vim.api.nvim_win_is_valid(winid) then
+			apply_statuscolumn(winid, bufnr)
+			apply_hidden_fold(winid, bufnr)
+		end
+	end
 	return true
 end
 
@@ -374,10 +695,11 @@ function M.refresh(args)
 	end
 
 	apply_highlights(bufnr)
+	M.sync_windows(bufnr)
 end
 
 function M.toggle(bufnr)
-	bufnr = bufnr or vim.api.nvim_get_current_buf()
+	bufnr = normalize_bufnr(bufnr)
 	local extmarks = vim.api.nvim_buf_get_extmarks(bufnr, ns_id, 0, -1, {})
 	if #extmarks > 0 then
 		vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1)
@@ -389,6 +711,7 @@ end
 function M.setup()
 	local cfg = config.get()
 	setup_highlights(cfg.header_colors)
+	M.sync_windows()
 end
 
 return M

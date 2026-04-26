@@ -21,6 +21,9 @@ description: dogshitnorm.nvim options.
 - `header_keybinding`
 - `header_style_enabled`
 - `header_style_keybinding`
+- `header_hide_enabled`
+- `header_hide_keybinding`
+- `header_line_number_offset`
 - `header_user`
 - `header_email`
 - `header_colors`
@@ -48,4 +51,3 @@ description: dogshitnorm.nvim options.
 - `line_saver_diagnostics`
 - `line_saver_always`
 - `line_saver_max_width`
-

@@ -11,6 +11,7 @@ Docs: <https://0xveya.github.io/dogshitnorm.nvim/>
 * **Asynchronous Execution**: Runs `norminette` in the background without freezing your editor.
 * **Native 42 Header Support**: Inserts and refreshes the standard 42 header for C-like files and Makefiles without depending on `42Paris/42header`.
 * **Header Styling**: Merges the visual 42 header gradient/highlighting from `fancy-header.nvim` into the main plugin with a toggle command.
+* **Header-Aware Viewing**: Optionally fold the on-disk 42 header out of the way, remap `gg` to the first real code line in that view, and display gutter line numbers relative to the first non-header line.
 * **Smart Header Guard Generator**: Automatically inserts C-style `#ifndef` guards in new `.h` files once the 42 header is present, ensures clean spacing, and keeps you in Normal mode.
 * **Makefile Boilerplate**: Instantly populates new `Makefile`s with 42-compliant mandatory rules (`all`, `clean`, `fclean`, `re`), dep-file support (`-MMD -MP`), and built-in debug toggles.
 * **Smart Source Sync**: Automatically detects your `SRC_DIR` from the Makefile and syncs your `SRCS` list with all `.c` files found in that directory (recursive). No more manual typing of every new file.
@@ -58,6 +59,9 @@ Using [lazy.nvim]():
         auto_header_guard = true,
         header_keybinding = "<leader>42",
         header_style_keybinding = "<leader>4h",
+        header_hide_enabled = false,
+        header_hide_keybinding = nil,
+        header_line_number_offset = false,
         guard_keybinding = "<leader>ch",
         auto_sort_defines = false,
         auto_sort_prototypes = false,
@@ -94,6 +98,8 @@ Using [lazy.nvim]():
 * **Linting**: Save your file (`:w`) or press `<leader>cn`.
 * **42 Header**: Run `:Stdheader` or press `header_keybinding` to insert/refresh the native 42 header. Saving a file updates the `Updated:` line when enabled.
 * **Header Styling**: Run `:HeaderToggle` or press `header_style_keybinding` to toggle the merged `fancy-header.nvim` visuals.
+* **Header Hiding**: Run `:HeaderHide [toggle|on|off]` or set `header_hide_enabled = true` to fold the real header out of the way while keeping it in the file for norminette. In that view, `gg` jumps to the first non-header line.
+* **Header-Relative Numbers**: Set `header_line_number_offset = true` to show gutter line numbers relative to the first non-header line instead of counting the 42 header.
 * **Auto-Guards**: Creating or saving a `.h` file inside an active directory will automatically trigger/fix inclusion guards.
 * **Include Sorting**: Run `:Includesort` inside a `.c` or `.h` file to sort contiguous include blocks. Set `auto_sort_includes = true` to run this automatically before saving C and header files.
 * **Define Sorting**: Run `:Definesort` inside a `.c` or `.h` file to sort contiguous simple define blocks. Set `auto_sort_defines = true` to run this automatically before saving C and header files.
@@ -121,6 +127,9 @@ Using [lazy.nvim]():
 | `header_keybinding` | `string` | `"<leader>42"` | Keymap to insert or refresh the 42 header. |
 | `header_style_enabled` | `boolean` | `true` | Apply merged `fancy-header.nvim` visual styling to 42 headers. |
 | `header_style_keybinding` | `string` | `"<leader>4h"` | Keymap to toggle header styling. |
+| `header_hide_enabled` | `boolean` | `false` | Fold the 42 header out of the active window while keeping it in the file. |
+| `header_hide_keybinding` | `string` | `nil` | Optional keymap to toggle the hidden-header view. |
+| `header_line_number_offset` | `boolean` | `false` | Display line numbers relative to the first non-header line when a 42 header is present. |
 | `header_user` | `string` | `nil` | Override the 42 username used in generated headers. Falls back to `vim.g.user42`. |
 | `header_email` | `string` | `nil` | Override the 42 email used in generated headers. Falls back to `vim.g.mail42`. |
 | `header_colors` | `table` | Rosé Pine-style defaults | Highlight groups and gradient colors for the visual 42 header layer. |

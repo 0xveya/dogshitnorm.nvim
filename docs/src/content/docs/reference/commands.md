@@ -15,6 +15,7 @@ description: Exposed commands and their intended use.
 
 - `:Stdheader`
 - `:HeaderToggle`
+- `:HeaderHide [toggle|on|off]`
 - `:Includesort`
 - `:Definesort`
 - `:Protosort`
@@ -26,4 +27,3 @@ description: Exposed commands and their intended use.
 - `:Makelib [name]`
 - `:Makedebug [toggle|on|off]`
 - `:Makestatus`
-
