@@ -193,6 +193,23 @@ local function existing_created_at(bufnr)
 	return created_line:match("Created:%s+([0-9/]+ [0-9:]+)")
 end
 
+local function existing_updated_at(bufnr)
+	local bounds_start = header_bounds(bufnr)
+	if bounds_start == nil then
+		return nil
+	end
+
+	local lines = vim.api.nvim_buf_get_lines(bufnr, 0, 11, false)
+	local updated_line = lines[9] or ""
+	return updated_line:match("Updated:%s+([0-9/]+ [0-9:]+)")
+end
+
+local function join_undo(bufnr)
+	pcall(vim.api.nvim_buf_call, bufnr, function()
+		vim.cmd("silent! undojoin")
+	end)
+end
+
 local function ensure_blank_after_header(bufnr)
 	local line = vim.api.nvim_buf_get_lines(bufnr, 11, 12, false)[1]
 	if line ~= "" then
@@ -237,12 +254,22 @@ function M.touch(bufnr)
 		return false
 	end
 
+	if not vim.bo[bufnr].modified then
+		return false
+	end
+
 	local created_at = existing_created_at(bufnr)
 	if not created_at then
 		return false
 	end
 
-	local lines = header_lines(bufnr, created_at, now_string())
+	local updated_at = now_string()
+	if existing_updated_at(bufnr) == updated_at then
+		return false
+	end
+
+	local lines = header_lines(bufnr, created_at, updated_at)
+	join_undo(bufnr)
 	vim.api.nvim_buf_set_lines(bufnr, 0, 11, false, lines)
 	return true
 end
