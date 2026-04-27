@@ -150,6 +150,7 @@ Generated Makefiles include:
 - `test`
 - `build`
 - `libft`
+- `libprintf`
 
 ==============================================================================
 7. Headers                                            *dogshitnorm-headers*

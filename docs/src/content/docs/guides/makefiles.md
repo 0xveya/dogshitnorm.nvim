@@ -26,12 +26,11 @@ The default generated Makefile includes:
 `makefile_exclude_dirs` defaults to:
 
 ```lua
-{ ".git", ".jj", "tests", "test", "build", "libft" }
+{ ".git", ".jj", "tests", "test", "build", "libft", "libprintf" }
 ```
 
-That prevents nested `libft` directories from being pulled into unrelated project Makefiles.
+That prevents nested `libft` and `libprintf` directories from being pulled into unrelated project Makefiles.
 
 ## Library mode
 
 If the current target already ends in `.a`, dogshitnorm treats the Makefile as a library target. `:Makelib libftprintf` normalizes the name to `libftprintf.a`.
-

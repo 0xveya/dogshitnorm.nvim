@@ -84,7 +84,7 @@ Using [lazy.nvim]():
         -- Makefile Sync settings
         auto_sync_makefile = true,
         makesync_keybinding = "<leader>cu",
-        makefile_exclude_dirs = { ".git", ".jj", "tests", "test", "build", "libft" },
+        makefile_exclude_dirs = { ".git", ".jj", "tests", "test", "build", "libft", "libprintf" },
 
         -- Optional: Only run inside these directories
         active_dirs = { 
@@ -158,7 +158,7 @@ Using [lazy.nvim]():
 | `guard_keybinding` | `string` | `"<leader>ch"` | Keymap to trigger header guard. |
 | `makefile_keybinding` | `string` | `"<leader>cm"` | Keymap to trigger Makefile stub. |
 | `makesync_keybinding` | `string` | `"<leader>cu"` | Keymap to sync SRCS with SRC_DIR. |
-| `makefile_exclude_dirs` | `table` | `{".git",".jj","tests","test","build","libft"}` | Directories ignored when syncing Makefile sources. Any path segment containing `tester` is also ignored. |
+| `makefile_exclude_dirs` | `table` | `{".git",".jj","tests","test","build","libft","libprintf"}` | Directories ignored when syncing Makefile sources. Any path segment containing `tester` is also ignored. |
 | `active_dirs` | `table` | `nil` | List of allowed project paths. |
 
 ## Requirements
