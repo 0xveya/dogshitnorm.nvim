@@ -376,6 +376,15 @@ local function insert_lines(lines, index, new_lines)
 	end
 end
 
+local function find_exact_line(lines, expected)
+	for i, line in ipairs(lines) do
+		if line == expected then
+			return i
+		end
+	end
+	return nil
+end
+
 local function add_target_commands(lines, target, commands)
 	if #commands == 0 then
 		return
@@ -443,6 +452,109 @@ local function inject_optional_library_support(lines, optional_libs)
 
 	add_target_commands(lines, "clean", clean_rules)
 	add_target_commands(lines, "fclean", fclean_rules)
+end
+
+local function ensure_optional_library_support(lines, optional_libs)
+	if #optional_libs == 0 then
+		return false
+	end
+
+	local changed = false
+	local insert_after = find_assignment_index(lines, "RM")
+		or find_assignment_index(lines, "DEBUG")
+		or find_assignment_index(lines, "LDLIBS")
+		or find_assignment_index(lines, "LDFLAGS")
+		or 1
+	local insert_at = insert_after + 1
+
+	if not find_exact_line(lines, "# Optional libs detected automatically.") then
+		insert_lines(lines, insert_at, { "", "# Optional libs detected automatically." })
+		insert_at = insert_at + 2
+		changed = true
+	end
+
+	for _, lib in ipairs(optional_libs) do
+		local dir_line = lib.dir_var .. "\t= " .. lib.dir
+		local lib_line = lib.lib_var .. "\t\t= $(" .. lib.dir_var .. ")/" .. lib.archive
+
+		if not find_assignment_index(lines, lib.dir_var) then
+			insert_lines(lines, insert_at, { dir_line })
+			insert_at = insert_at + 1
+			changed = true
+		end
+		if not find_assignment_index(lines, lib.lib_var) then
+			insert_lines(lines, insert_at, { lib_line })
+			insert_at = insert_at + 1
+			changed = true
+		end
+	end
+
+	local libs_refs = {}
+	for _, lib in ipairs(optional_libs) do
+		table.insert(libs_refs, "$(" .. lib.lib_var .. ")")
+	end
+
+	local libs_idx = find_assignment_index(lines, "LIBS")
+	if libs_idx then
+		for _, ref in ipairs(libs_refs) do
+			local updated = append_token(lines[libs_idx], ref)
+			if updated ~= lines[libs_idx] then
+				lines[libs_idx] = updated
+				changed = true
+			end
+		end
+	else
+		insert_lines(lines, insert_at, { "LIBS\t\t= " .. table.concat(libs_refs, " "), "" })
+		changed = true
+	end
+
+	for i, line in ipairs(lines) do
+		if line:match("^%$%(NAME%):") then
+			local updated = append_token(line, "$(LIBS)")
+			if updated ~= line then
+				lines[i] = updated
+				changed = true
+			end
+			break
+		end
+	end
+
+	for i, line in ipairs(lines) do
+		if line:match("^\t%$%(CC%)") and line:find("-o $(NAME)", 1, true) then
+			local updated = replace_or_append_before(line, "$(LDLIBS)", "$(LIBS)")
+			if updated ~= line then
+				lines[i] = updated
+				changed = true
+			end
+			break
+		end
+	end
+
+	local clean_idx = find_target_index(lines, "clean")
+	for _, lib in ipairs(optional_libs) do
+		local build_target = "$(" .. lib.lib_var .. "):"
+		local build_recipe = "\t$(MAKE) -C $(" .. lib.dir_var .. ")"
+		local clean_recipe = "\t$(MAKE) -C $(" .. lib.dir_var .. ") clean"
+		local fclean_recipe = "\t$(MAKE) -C $(" .. lib.dir_var .. ") fclean"
+
+		if not find_target_index(lines, build_target) and clean_idx then
+			insert_lines(lines, clean_idx, { build_target, build_recipe, "" })
+			clean_idx = clean_idx + 3
+			changed = true
+		end
+
+		if not find_exact_line(lines, clean_recipe) then
+			add_target_commands(lines, "clean", { clean_recipe })
+			changed = true
+		end
+
+		if not find_exact_line(lines, fclean_recipe) then
+			add_target_commands(lines, "fclean", { fclean_recipe })
+			changed = true
+		end
+	end
+
+	return changed
 end
 
 local function save_makefile(bufnr)
@@ -700,6 +812,7 @@ function M.generate(target)
 	local cfg = config.get()
 	local bufnr = resolve_generate_bufnr(target)
 	local filepath = vim.api.nvim_buf_get_name(bufnr)
+	local project_root = vim.fn.fnamemodify(filepath, ":h")
 
 	if filepath == "" or filepath:match("oil://") then
 		return
@@ -711,7 +824,26 @@ function M.generate(target)
 	local existing_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
 	local content = table.concat(existing_lines, "\n")
 	if content:match("all:") or content:match("NAME%s*=") then
-		return
+		local optional_libs = detect_optional_libraries(project_root, cfg)
+		local lines = vim.deepcopy(existing_lines)
+		local changed = ensure_optional_library_support(lines, optional_libs)
+		if changed then
+			vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+			if save_makefile(bufnr) then
+				vim.notify("Makefile optional libs synced", vim.log.levels.INFO, { title = "dogshitnorm" })
+			end
+			return true
+		end
+		if #optional_libs == 0 then
+			vim.notify(
+				"No optional libraries detected for this Makefile",
+				vim.log.levels.INFO,
+				{ title = "dogshitnorm" }
+			)
+		else
+			vim.notify("Makefile already has optional library support", vim.log.levels.INFO, { title = "dogshitnorm" })
+		end
+		return false
 	end
 
 	if not content:match("/%* %*+ %*/") and not content:match("^# %*+ #") then
@@ -727,7 +859,6 @@ function M.generate(target)
 	vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
 	local stub_lines = vim.split(cfg.makefile_stub, "\n")
-	local project_root = vim.fn.fnamemodify(filepath, ":h")
 	inject_optional_library_support(stub_lines, detect_optional_libraries(project_root, cfg))
 	table.insert(stub_lines, 1, "")
 	vim.api.nvim_buf_set_lines(bufnr, -1, -1, false, stub_lines)

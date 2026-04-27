@@ -4,6 +4,7 @@ local root = vim.fn.getcwd()
 local tmpdir = vim.fn.tempname()
 local nolib_tmpdir = vim.fn.tempname()
 local custom_tmpdir = vim.fn.tempname()
+local legacy_tmpdir = vim.fn.tempname()
 
 local function write_demo_project(dir)
 	vim.fn.mkdir(dir, "p")
@@ -28,6 +29,7 @@ end
 write_demo_project(tmpdir)
 write_demo_project(nolib_tmpdir)
 write_demo_project(custom_tmpdir)
+write_demo_project(legacy_tmpdir)
 
 vim.fn.mkdir(tmpdir .. "/libft", "p")
 vim.fn.mkdir(tmpdir .. "/ft_printf", "p")
@@ -39,8 +41,33 @@ vim.fn.mkdir(custom_tmpdir .. "/my_printf", "p")
 vim.fn.writefile({ "NAME\t\t= libcustomft.a" }, custom_tmpdir .. "/my_libft/Makefile")
 vim.fn.writefile({ "NAME\t\t= libcustomprintf.a" }, custom_tmpdir .. "/my_printf/Makefile")
 
+vim.fn.mkdir(legacy_tmpdir .. "/libprintf", "p")
+vim.fn.writefile({ "NAME\t\t= libftprintf.a" }, legacy_tmpdir .. "/libprintf/Makefile")
+vim.fn.writefile({
+	"NAME\t\t= push_swap",
+	"",
+	"CC\t\t= cc",
+	"CFLAGS\t\t= -Wall -Wextra -Werror",
+	"CPPFLAGS\t= -MMD -MP",
+	"LDFLAGS\t\t=",
+	"LDLIBS\t\t=",
+	"DEBUG\t\t?= 0",
+	"RM\t\t= rm -f",
+	"",
+	"all: $(NAME)",
+	"",
+	"$(NAME): $(OBJS)",
+	"\t$(CC) $(CFLAGS) $(LDFLAGS) $(OBJS) $(LDLIBS) -o $(NAME)",
+	"",
+	"clean:",
+	"\t$(RM) $(OBJS) $(DEPS)",
+	"",
+	"fclean: clean",
+	"\t$(RM) $(NAME)",
+}, legacy_tmpdir .. "/Makefile")
+
 require("dogshitnorm").setup({
-	active_dirs = { root, tmpdir, nolib_tmpdir, custom_tmpdir },
+	active_dirs = { root, tmpdir, nolib_tmpdir, custom_tmpdir, legacy_tmpdir },
 	notify_on_sync = false,
 })
 
@@ -70,7 +97,7 @@ require("dogshitnorm.makefile").generate(0)
 vim.cmd("write")
 
 require("dogshitnorm.config").setup({
-	active_dirs = { root, tmpdir, nolib_tmpdir, custom_tmpdir },
+	active_dirs = { root, tmpdir, nolib_tmpdir, custom_tmpdir, legacy_tmpdir },
 	notify_on_sync = false,
 	makefile_optional_libs = {
 		{
@@ -94,6 +121,15 @@ vim.cmd("edit " .. vim.fn.fnameescape(custom_tmpdir .. "/Makefile"))
 require("dogshitnorm.makefile").generate(0)
 vim.cmd("write")
 
+require("dogshitnorm.config").setup({
+	active_dirs = { root, tmpdir, nolib_tmpdir, custom_tmpdir, legacy_tmpdir },
+	notify_on_sync = false,
+})
+
+vim.cmd("edit " .. vim.fn.fnameescape(legacy_tmpdir .. "/Makefile"))
+vim.cmd("Makegen")
+vim.cmd("write")
+
 assert(vim.fn.filereadable(tmpdir .. "/src/main.c") == 1, "smoke C file missing")
 assert(vim.fn.filereadable(tmpdir .. "/ft_demo.h") == 1, "smoke header file missing")
 assert(vim.fn.filereadable(tmpdir .. "/Makefile") == 1, "smoke Makefile missing")
@@ -112,3 +148,14 @@ assert(custom_makefile:find("CUSTOM_LIBFT_DIR", 1, true), "custom libft dir var 
 assert(custom_makefile:find("CUSTOM_PRINTF_DIR", 1, true), "custom printf dir var was not inserted")
 assert(custom_makefile:find("libcustomft.a", 1, true), "custom libft archive was not inserted")
 assert(custom_makefile:find("libcustomprintf.a", 1, true), "custom printf archive was not inserted")
+
+local legacy_makefile = table.concat(vim.fn.readfile(legacy_tmpdir .. "/Makefile"), "\n")
+assert(legacy_makefile:find("PRINTF_DIR", 1, true), "existing Makefile did not get printf dir support")
+assert(
+	legacy_makefile:find("%$%(NAME%): %$%(OBJS%) %$%(LIBS%)"),
+	"existing Makefile target did not gain LIBS dependency"
+)
+assert(
+	legacy_makefile:find("%$%(CC%) %$%(CFLAGS%) %$%(LDFLAGS%) %$%(OBJS%) %$%(LIBS%) %$%(LDLIBS%) %-o %$%(NAME%)"),
+	"existing Makefile link line did not gain LIBS"
+)
