@@ -52,7 +52,7 @@ require("dogshitnorm.header").add_prototype_to_header(0)
 vim.cmd("write")
 
 vim.cmd("edit " .. vim.fn.fnameescape(tmpdir .. "/Makefile"))
-require("dogshitnorm.makefile").generate(0)
+vim.cmd("Makegen")
 require("dogshitnorm.makefile").sync(0)
 require("dogshitnorm.makefile").set_debug(0, "on")
 

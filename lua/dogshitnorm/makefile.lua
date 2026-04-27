@@ -81,6 +81,25 @@ local function write_makefile_buffer(bufnr)
 	return true
 end
 
+local function resolve_generate_bufnr(target)
+	if type(target) == "number" and vim.api.nvim_buf_is_valid(target) then
+		return target
+	end
+
+	if type(target) == "string" and target ~= "" then
+		local bufnr = vim.fn.bufnr(target)
+		if bufnr == -1 then
+			bufnr = vim.fn.bufadd(target)
+			vim.fn.bufload(bufnr)
+		end
+		if vim.api.nvim_buf_is_valid(bufnr) then
+			return bufnr
+		end
+	end
+
+	return vim.api.nvim_get_current_buf()
+end
+
 local function find_assignment_index(lines, name)
 	local pattern = "^" .. name .. "%s*[?+:]?="
 	for i, line in ipairs(lines) do
@@ -677,9 +696,9 @@ function M.background_sync(filepath)
 	end
 end
 
-function M.generate(bufnr)
+function M.generate(target)
 	local cfg = config.get()
-	bufnr = bufnr or vim.api.nvim_get_current_buf()
+	local bufnr = resolve_generate_bufnr(target)
 	local filepath = vim.api.nvim_buf_get_name(bufnr)
 
 	if filepath == "" or filepath:match("oil://") then
