@@ -36,6 +36,7 @@ description: dogshitnorm.nvim options.
 - `auto_sync_makefile`
 - `makesync_keybinding`
 - `makefile_exclude_dirs`
+- `makefile_optional_libs`
 - `src_dir`
 - `notify_on_sync`
 - `makefile_stub`

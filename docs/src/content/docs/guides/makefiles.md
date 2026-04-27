@@ -12,6 +12,32 @@ The default generated Makefile includes:
 - `DEPS = $(OBJS:.o=.d)`
 - `-include $(DEPS)`
 - `DEBUG ?= 0`
+- automatic `libft` and `ft_printf`/`libprintf` detection in the project root
+
+If one of those optional libraries exists, dogshitnorm adds recursive `$(MAKE) -C ...` rules for build, `clean`, and `fclean`, then links the archive into `$(NAME)`. If nothing is detected, the generated stub leaves an inline comment so it is obvious that no optional library was wired in.
+
+You can override the default `libft` / `ft_printf` / `libprintf` names with `makefile_optional_libs`:
+
+```lua
+require("dogshitnorm").setup({
+	makefile_optional_libs = {
+		{
+			key = "libft",
+			dirs = { "my_libft" },
+			dir_var = "LIBFT_DIR",
+			lib_var = "LIBFT",
+			archive = "libcustomft.a",
+		},
+		{
+			key = "printf",
+			dirs = { "my_printf" },
+			dir_var = "PRINTF_DIR",
+			lib_var = "PRINTF",
+			archive = "libcustomprintf.a",
+		},
+	},
+})
+```
 
 ## Commands
 

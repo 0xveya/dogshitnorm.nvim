@@ -124,6 +124,7 @@ Makefile options:
 - `auto_sync_makefile`
 - `makesync_keybinding`
 - `makefile_exclude_dirs`
+- `makefile_optional_libs`
 - `src_dir`
 - `notify_on_sync`
 
@@ -138,6 +139,7 @@ Generated Makefiles include:
 - dependency files with `CPPFLAGS = -MMD -MP`
 - `DEPS` and `-include $(DEPS)`
 - `DEBUG ?= 0`
+- auto-detected `libft` and `ft_printf`/`libprintf` recursive rules when present
 - `:Makelib` conversion for static libraries
 - `:Makedebug` to flip debug mode
 - `:Makestatus` to report binary/library and debug/deps state

@@ -85,6 +85,26 @@ Using [lazy.nvim]():
         auto_sync_makefile = true,
         makesync_keybinding = "<leader>cu",
         makefile_exclude_dirs = { ".git", ".jj", "tests", "test", "build", "libft", "libprintf" },
+        makefile_optional_libs = {
+            {
+                key = "libft",
+                dirs = { "libft" },
+                dir_var = "LIBFT_DIR",
+                lib_var = "LIBFT",
+                archive = "libft.a",
+            },
+            {
+                key = "printf",
+                dirs = { "ft_printf", "libprintf", "libftprintf" },
+                dir_var = "PRINTF_DIR",
+                lib_var = "PRINTF",
+                archives = {
+                    ft_printf = "libftprintf.a",
+                    libprintf = "libprintf.a",
+                    libftprintf = "libftprintf.a",
+                },
+            },
+        },
 
         -- Optional: Only run inside these directories
         active_dirs = { 
@@ -111,7 +131,7 @@ Using [lazy.nvim]():
 * **Line Counts**: Run `:NormLineCounts` or press `line_count_keybinding` to toggle virtual line count overlays above `.c` functions.
 * **Line Savers**: Run `:NormLineSavers` or use LSP code actions inside a `.c` function. Actions can remove extra blank lines inside the current function, combine an expression directly followed by a return with the comma operator, move simple `s++`/`s--` loop increments into a nearby `*s` expression, or fold a single-line `while (...)` body increment into `while ((...) && (s++, 1));`. The required declaration/code separator blank line is not offered as removable. More complex while-loop counter patterns are still listed as suggestions instead of being applied blindly.
 * **Quick Fixes**: Use Neovim's `vim.lsp.buf.code_action()` (`gra` by default on current Neovim) on a diagnostic line, run `:NormFix`, or run `:NormFixAll` to repair safe file-level issues such as header guards, include/define/prototype order, Makefile sources, whitespace, return parentheses, missing `void`, function spacing, overlong-function line savers, and snake_case naming.
-* **Auto-Makefile**: Creating a new `Makefile` will trigger the 42 Header and append a project stub.
+* **Auto-Makefile**: Creating a new `Makefile` will trigger the 42 Header and append a project stub. If configured optional libraries such as `libft` or `ft_printf`/`libprintf` exist in the project root, the generated Makefile also gets recursive build/clean rules and links those archives automatically. If none are found, the stub leaves a comment saying so.
 * **Source Sync**: Press `<leader>cu` (or run `:Makesync`) inside a Makefile. The plugin will read your `SRC_DIR` variable, crawl that folder for `.c` files, update your `SRCS` block with proper 42-style formatting and backslashes, and write the Makefile.
 * **Library Conversion**: Run `:Makelib` to rewrite the current Makefile as a static-library build. Pass an optional archive name such as `:Makelib libftprintf` or `:Makelib libftprintf.a`. If `NAME` already ends in `.a`, that archive name is preserved and `:Makestatus` reports library mode automatically.
 * **Debug Toggle**: Run `:Makedebug`, `:Makedebug on`, or `:Makedebug off` to flip the Makefile `DEBUG` flag. The plugin will ensure the dep-file and debug boilerplate exists and then notify the current state.
@@ -159,6 +179,7 @@ Using [lazy.nvim]():
 | `makefile_keybinding` | `string` | `"<leader>cm"` | Keymap to trigger Makefile stub. |
 | `makesync_keybinding` | `string` | `"<leader>cu"` | Keymap to sync SRCS with SRC_DIR. |
 | `makefile_exclude_dirs` | `table` | `{".git",".jj","tests","test","build","libft","libprintf"}` | Directories ignored when syncing Makefile sources. Any path segment containing `tester` is also ignored. |
+| `makefile_optional_libs` | `table` | default `libft` / `ft_printf` / `libprintf` mapping | Optional libraries to auto-detect in generated Makefiles. Each entry can define `dirs`, `dir_var`, `lib_var`, `archive`, and per-directory `archives`. |
 | `active_dirs` | `table` | `nil` | List of allowed project paths. |
 
 ## Requirements

@@ -106,6 +106,16 @@ local function append_token(line, token)
 	return line .. " " .. token
 end
 
+local function replace_or_append_before(line, marker, token)
+	if line:find(token, 1, true) then
+		return line
+	end
+	if line:find(marker, 1, true) then
+		return line:gsub(vim.pesc(marker), token .. " " .. marker, 1)
+	end
+	return append_token(line, token)
+end
+
 local function find_target_index(lines, target)
 	for i, line in ipairs(lines) do
 		if line:match("^" .. vim.pesc(target) .. "%s*:") then
@@ -235,6 +245,185 @@ local function write_body_with_header(bufnr, body_lines)
 	end
 	vim.list_extend(final_lines, body_lines)
 	vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, final_lines)
+end
+
+local function read_makefile_name(makefile_path)
+	if vim.fn.filereadable(makefile_path) == 0 then
+		return nil
+	end
+
+	local lines = vim.fn.readfile(makefile_path)
+	local name = get_assignment_value(lines, "NAME")
+	if not name or name == "" then
+		return nil
+	end
+	return name
+end
+
+local function normalize_optional_library_candidates(cfg)
+	local configured = cfg.makefile_optional_libs
+	if type(configured) ~= "table" then
+		return {}
+	end
+
+	local candidates = {}
+	for index, entry in ipairs(configured) do
+		if type(entry) == "table" then
+			local dir_var = entry.dir_var
+			local lib_var = entry.lib_var or entry.var
+			local dirs = entry.dirs
+			if
+				type(dir_var) == "string"
+				and dir_var ~= ""
+				and type(lib_var) == "string"
+				and lib_var ~= ""
+				and type(dirs) == "table"
+				and #dirs > 0
+			then
+				table.insert(candidates, {
+					id = entry.key or entry.id or ("lib_" .. index),
+					dir_var = dir_var,
+					lib_var = lib_var,
+					dirs = dirs,
+					archive = entry.archive,
+					archives = entry.archives,
+				})
+			end
+		end
+	end
+
+	return candidates
+end
+
+local function detect_optional_libraries(project_root, cfg)
+	local candidates = normalize_optional_library_candidates(cfg)
+	local detected = {}
+
+	for _, candidate in ipairs(candidates) do
+		for _, dir in ipairs(candidate.dirs) do
+			local lib_root = project_root .. "/" .. dir
+			if vim.fn.isdirectory(lib_root) == 1 then
+				local archive = read_makefile_name(lib_root .. "/Makefile")
+				if not archive or archive == "" then
+					if type(candidate.archives) == "table" then
+						archive = candidate.archives[dir]
+					end
+					archive = archive or candidate.archive
+				end
+				archive = archive or (vim.fn.fnamemodify(dir, ":t") .. ".a")
+				table.insert(detected, {
+					id = candidate.id,
+					lib_var = candidate.lib_var,
+					dir_var = candidate.dir_var,
+					dir = dir,
+					archive = archive,
+				})
+				break
+			end
+		end
+	end
+
+	return detected
+end
+
+local function build_optional_library_vars(optional_libs)
+	local lines = {}
+
+	if #optional_libs == 0 then
+		return {
+			"# Optional libs: no configured optional library directory detected.",
+			"LIBS\t\t=",
+		}
+	end
+
+	table.insert(lines, "# Optional libs detected automatically.")
+	for _, lib in ipairs(optional_libs) do
+		table.insert(lines, lib.dir_var .. "\t= " .. lib.dir)
+		table.insert(lines, lib.lib_var .. "\t\t= $(" .. lib.dir_var .. ")/" .. lib.archive)
+	end
+
+	local refs = {}
+	for _, lib in ipairs(optional_libs) do
+		table.insert(refs, "$(" .. lib.lib_var .. ")")
+	end
+	table.insert(lines, "LIBS\t\t= " .. table.concat(refs, " "))
+
+	return lines
+end
+
+local function insert_lines(lines, index, new_lines)
+	for offset, line in ipairs(new_lines) do
+		table.insert(lines, index + offset - 1, line)
+	end
+end
+
+local function add_target_commands(lines, target, commands)
+	if #commands == 0 then
+		return
+	end
+
+	local target_idx = find_target_index(lines, target)
+	if not target_idx then
+		return
+	end
+
+	local insert_at = target_idx + 1
+	while insert_at <= #lines and lines[insert_at]:match("^\t") do
+		insert_at = insert_at + 1
+	end
+	insert_lines(lines, insert_at, commands)
+end
+
+local function inject_optional_library_support(lines, optional_libs)
+	local vars = build_optional_library_vars(optional_libs)
+	local insert_after = find_assignment_index(lines, "RM")
+		or find_assignment_index(lines, "DEBUG")
+		or find_assignment_index(lines, "LDLIBS")
+		or find_assignment_index(lines, "LDFLAGS")
+
+	if insert_after then
+		insert_lines(lines, insert_after + 1, { "" })
+		insert_lines(lines, insert_after + 2, vars)
+		insert_lines(lines, insert_after + 2 + #vars, { "" })
+	end
+
+	for i, line in ipairs(lines) do
+		if line:match("^%$%(NAME%):") then
+			lines[i] = append_token(line, "$(LIBS)")
+			break
+		end
+	end
+
+	for i, line in ipairs(lines) do
+		if line:match("^\t%$%(CC%)") and line:find("-o $(NAME)", 1, true) then
+			lines[i] = replace_or_append_before(line, "$(LDLIBS)", "$(LIBS)")
+			break
+		end
+	end
+
+	if #optional_libs == 0 then
+		return
+	end
+
+	local build_rules = {}
+	local clean_rules = {}
+	local fclean_rules = {}
+
+	for _, lib in ipairs(optional_libs) do
+		table.insert(build_rules, "$(" .. lib.lib_var .. "):")
+		table.insert(build_rules, "\t$(MAKE) -C $(" .. lib.dir_var .. ")")
+		table.insert(build_rules, "")
+		table.insert(clean_rules, "\t$(MAKE) -C $(" .. lib.dir_var .. ") clean")
+		table.insert(fclean_rules, "\t$(MAKE) -C $(" .. lib.dir_var .. ") fclean")
+	end
+
+	local clean_idx = find_target_index(lines, "clean")
+	if clean_idx then
+		insert_lines(lines, clean_idx, build_rules)
+	end
+
+	add_target_commands(lines, "clean", clean_rules)
+	add_target_commands(lines, "fclean", fclean_rules)
 end
 
 local function save_makefile(bufnr)
@@ -519,6 +708,8 @@ function M.generate(bufnr)
 	vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
 	local stub_lines = vim.split(cfg.makefile_stub, "\n")
+	local project_root = vim.fn.fnamemodify(filepath, ":h")
+	inject_optional_library_support(stub_lines, detect_optional_libraries(project_root, cfg))
 	table.insert(stub_lines, 1, "")
 	vim.api.nvim_buf_set_lines(bufnr, -1, -1, false, stub_lines)
 

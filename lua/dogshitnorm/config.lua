@@ -41,6 +41,26 @@ M.defaults = {
 	makefile_keybinding = "<leader>cm",
 	src_dir = "src",
 	makefile_exclude_dirs = { ".git", ".jj", "tests", "test", "build", "libft", "libprintf" },
+	makefile_optional_libs = {
+		{
+			key = "libft",
+			dirs = { "libft" },
+			dir_var = "LIBFT_DIR",
+			lib_var = "LIBFT",
+			archive = "libft.a",
+		},
+		{
+			key = "printf",
+			dirs = { "ft_printf", "libprintf", "libftprintf" },
+			dir_var = "PRINTF_DIR",
+			lib_var = "PRINTF",
+			archives = {
+				ft_printf = "libftprintf.a",
+				libprintf = "libprintf.a",
+				libftprintf = "libftprintf.a",
+			},
+		},
+	},
 	notify_on_sync = true,
 	header_user = nil,
 	header_email = nil,
