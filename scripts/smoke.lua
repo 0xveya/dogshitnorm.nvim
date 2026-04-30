@@ -5,6 +5,8 @@ local tmpdir = vim.fn.tempname()
 local nolib_tmpdir = vim.fn.tempname()
 local custom_tmpdir = vim.fn.tempname()
 local legacy_tmpdir = vim.fn.tempname()
+local libft_root = vim.fn.tempname()
+local libft_project = libft_root .. "/libft"
 
 local function write_demo_project(dir)
 	vim.fn.mkdir(dir, "p")
@@ -30,6 +32,7 @@ write_demo_project(tmpdir)
 write_demo_project(nolib_tmpdir)
 write_demo_project(custom_tmpdir)
 write_demo_project(legacy_tmpdir)
+write_demo_project(libft_project)
 
 vim.fn.mkdir(tmpdir .. "/libft", "p")
 vim.fn.mkdir(tmpdir .. "/ft_printf", "p")
@@ -67,7 +70,7 @@ vim.fn.writefile({
 }, legacy_tmpdir .. "/Makefile")
 
 require("dogshitnorm").setup({
-	active_dirs = { root, tmpdir, nolib_tmpdir, custom_tmpdir, legacy_tmpdir },
+	active_dirs = { root, tmpdir, nolib_tmpdir, custom_tmpdir, legacy_tmpdir, libft_root },
 	notify_on_sync = false,
 })
 
@@ -88,6 +91,20 @@ assert(linked_makefile:find("LIBFT_DIR"), "libft dependency block was not insert
 assert(linked_makefile:find("PRINTF_DIR"), "ft_printf dependency block was not inserted")
 assert(linked_makefile:find("%$%(MAKE%) %-C %$%(LIBFT_DIR%)"), "libft recursive build rule was not inserted")
 assert(linked_makefile:find("%$%(MAKE%) %-C %$%(PRINTF_DIR%)"), "ft_printf recursive build rule was not inserted")
+assert(
+	linked_makefile:find("re:\n\t$(MAKE) fclean\n\t$(MAKE) all", 1, true),
+	"binary Makefile re rule was not normalized for recursive make"
+)
+
+vim.fn.delete(tmpdir .. "/libft", "rf")
+assert(vim.fn.rename(tmpdir .. "/ft_printf", tmpdir .. "/libftprintf") == 0, "failed to rename ft_printf test directory")
+vim.fn.writefile({ "NAME\t\t= libftprintf.a" }, tmpdir .. "/libftprintf/Makefile")
+require("dogshitnorm.makefile").background_sync(tmpdir)
+
+local renamed_makefile = table.concat(vim.fn.readfile(tmpdir .. "/Makefile"), "\n")
+assert(not renamed_makefile:find("LIBFT_DIR", 1, true), "removed libft support was not cleaned from Makefile")
+assert(not renamed_makefile:find("ft_printf", 1, true), "renamed printf directory was not removed from Makefile")
+assert(renamed_makefile:find("PRINTF_DIR\t= libftprintf", 1, true), "renamed printf directory was not synced")
 
 require("dogshitnorm.makefile").convert_to_library(0, "libftdemo")
 vim.cmd("write")
@@ -97,7 +114,7 @@ require("dogshitnorm.makefile").generate(0)
 vim.cmd("write")
 
 require("dogshitnorm.config").setup({
-	active_dirs = { root, tmpdir, nolib_tmpdir, custom_tmpdir, legacy_tmpdir },
+	active_dirs = { root, tmpdir, nolib_tmpdir, custom_tmpdir, legacy_tmpdir, libft_root },
 	notify_on_sync = false,
 	makefile_optional_libs = {
 		{
@@ -122,9 +139,11 @@ require("dogshitnorm.makefile").generate(0)
 vim.cmd("write")
 
 require("dogshitnorm.config").setup({
-	active_dirs = { root, tmpdir, nolib_tmpdir, custom_tmpdir, legacy_tmpdir },
+	active_dirs = { root, tmpdir, nolib_tmpdir, custom_tmpdir, legacy_tmpdir, libft_root },
 	notify_on_sync = false,
 })
+
+require("dogshitnorm.makefile").background_sync(libft_project .. "/src/main.c")
 
 vim.cmd("edit " .. vim.fn.fnameescape(legacy_tmpdir .. "/Makefile"))
 vim.cmd("Makegen")
@@ -148,6 +167,15 @@ assert(custom_makefile:find("CUSTOM_LIBFT_DIR", 1, true), "custom libft dir var 
 assert(custom_makefile:find("CUSTOM_PRINTF_DIR", 1, true), "custom printf dir var was not inserted")
 assert(custom_makefile:find("libcustomft.a", 1, true), "custom libft archive was not inserted")
 assert(custom_makefile:find("libcustomprintf.a", 1, true), "custom printf archive was not inserted")
+
+local libft_makefile = table.concat(vim.fn.readfile(libft_project .. "/Makefile"), "\n")
+assert(libft_makefile:find("NAME\t\t= libft.a", 1, true), "libft project did not auto-generate a library Makefile")
+assert(libft_makefile:find("$(AR) $(ARFLAGS) $(NAME) $(OBJS)", 1, true), "libft project did not use the archive rule")
+assert(not libft_makefile:find("your_project_name", 1, true), "libft project kept the binary template placeholder")
+assert(
+	libft_makefile:find("re:\n\t$(MAKE) fclean\n\t$(MAKE) all", 1, true),
+	"library Makefile re rule was not normalized for recursive make"
+)
 
 local legacy_makefile = table.concat(vim.fn.readfile(legacy_tmpdir .. "/Makefile"), "\n")
 assert(legacy_makefile:find("PRINTF_DIR", 1, true), "existing Makefile did not get printf dir support")

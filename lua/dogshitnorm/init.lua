@@ -98,7 +98,7 @@ function M.setup(opts)
 					return
 				end
 
-				if is_in_makefile_src(dir, cfg) then
+				if utils.find_project_root(dir) then
 					vim.schedule(function()
 						makefile.background_sync(dir)
 					end)
@@ -111,7 +111,7 @@ function M.setup(opts)
 			group = oil_group,
 			callback = function(args)
 				vim.schedule(function()
-					makefile.update_sources(args.buf)
+					makefile.background_sync(vim.api.nvim_buf_get_name(args.buf))
 				end)
 			end,
 		})

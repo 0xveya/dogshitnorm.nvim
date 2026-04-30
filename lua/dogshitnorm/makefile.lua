@@ -3,6 +3,8 @@ local header42 = require("dogshitnorm.header42")
 local utils = require("dogshitnorm.utils")
 
 local M = {}
+local OPTIONAL_LIB_COMMENT = "# Optional libs detected automatically."
+local OPTIONAL_LIB_EMPTY_COMMENT = "# Optional libs: no configured optional library directory detected."
 
 local function get_makefile_context(target, warn_on_missing)
 	local bufnr
@@ -245,7 +247,9 @@ local function build_library_template(name, src_dir, src_block, debug_value)
 		"fclean: clean",
 		"\t$(RM) $(NAME)",
 		"",
-		"re: fclean all",
+		"re:",
+		"\t$(MAKE) fclean",
+		"\t$(MAKE) all",
 		"",
 		"-include $(DEPS)",
 		"",
@@ -350,12 +354,12 @@ local function build_optional_library_vars(optional_libs)
 
 	if #optional_libs == 0 then
 		return {
-			"# Optional libs: no configured optional library directory detected.",
+			OPTIONAL_LIB_EMPTY_COMMENT,
 			"LIBS\t\t=",
 		}
 	end
 
-	table.insert(lines, "# Optional libs detected automatically.")
+	table.insert(lines, OPTIONAL_LIB_COMMENT)
 	for _, lib in ipairs(optional_libs) do
 		table.insert(lines, lib.dir_var .. "\t= " .. lib.dir)
 		table.insert(lines, lib.lib_var .. "\t\t= $(" .. lib.dir_var .. ")/" .. lib.archive)
@@ -376,15 +380,6 @@ local function insert_lines(lines, index, new_lines)
 	end
 end
 
-local function find_exact_line(lines, expected)
-	for i, line in ipairs(lines) do
-		if line == expected then
-			return i
-		end
-	end
-	return nil
-end
-
 local function add_target_commands(lines, target, commands)
 	if #commands == 0 then
 		return
@@ -402,159 +397,209 @@ local function add_target_commands(lines, target, commands)
 	insert_lines(lines, insert_at, commands)
 end
 
-local function inject_optional_library_support(lines, optional_libs)
-	local vars = build_optional_library_vars(optional_libs)
-	local insert_after = find_assignment_index(lines, "RM")
-		or find_assignment_index(lines, "DEBUG")
-		or find_assignment_index(lines, "LDLIBS")
-		or find_assignment_index(lines, "LDFLAGS")
-
-	if insert_after then
-		insert_lines(lines, insert_after + 1, { "" })
-		insert_lines(lines, insert_after + 2, vars)
-		insert_lines(lines, insert_after + 2 + #vars, { "" })
-	end
-
-	for i, line in ipairs(lines) do
-		if line:match("^%$%(NAME%):") then
-			lines[i] = append_token(line, "$(LIBS)")
-			break
-		end
-	end
-
-	for i, line in ipairs(lines) do
-		if line:match("^\t%$%(CC%)") and line:find("-o $(NAME)", 1, true) then
-			lines[i] = replace_or_append_before(line, "$(LDLIBS)", "$(LIBS)")
-			break
-		end
-	end
-
-	if #optional_libs == 0 then
-		return
-	end
-
-	local build_rules = {}
-	local clean_rules = {}
-	local fclean_rules = {}
-
-	for _, lib in ipairs(optional_libs) do
-		table.insert(build_rules, "$(" .. lib.lib_var .. "):")
-		table.insert(build_rules, "\t$(MAKE) -C $(" .. lib.dir_var .. ")")
-		table.insert(build_rules, "")
-		table.insert(clean_rules, "\t$(MAKE) -C $(" .. lib.dir_var .. ") clean")
-		table.insert(fclean_rules, "\t$(MAKE) -C $(" .. lib.dir_var .. ") fclean")
-	end
-
-	local clean_idx = find_target_index(lines, "clean")
-	if clean_idx then
-		insert_lines(lines, clean_idx, build_rules)
-	end
-
-	add_target_commands(lines, "clean", clean_rules)
-	add_target_commands(lines, "fclean", fclean_rules)
-end
-
-local function ensure_optional_library_support(lines, optional_libs)
-	if #optional_libs == 0 then
+local function lines_equal(a, b)
+	if #a ~= #b then
 		return false
 	end
 
-	local changed = false
-	local insert_after = find_assignment_index(lines, "RM")
-		or find_assignment_index(lines, "DEBUG")
-		or find_assignment_index(lines, "LDLIBS")
-		or find_assignment_index(lines, "LDFLAGS")
+	for i, line in ipairs(a) do
+		if line ~= b[i] then
+			return false
+		end
+	end
+
+	return true
+end
+
+local function normalize_blank_lines(lines)
+	local normalized = {}
+	local prev_blank = false
+
+	for _, line in ipairs(lines) do
+		local is_blank = line == ""
+		if not (is_blank and prev_blank) then
+			table.insert(normalized, line)
+		end
+		prev_blank = is_blank
+	end
+
+	return normalized
+end
+
+local function append_unique_token(tokens, seen, token)
+	if token == nil or token == "" or seen[token] then
+		return
+	end
+	seen[token] = true
+	table.insert(tokens, token)
+end
+
+local function extract_assignment_name(line)
+	return line:match("^([%a_][%w_]*)%s*[?+:]?=")
+end
+
+local function collect_optional_library_metadata(cfg)
+	local managed = {
+		dir_vars = {},
+		lib_vars = {},
+		lib_refs = {},
+	}
+
+	for _, candidate in ipairs(normalize_optional_library_candidates(cfg)) do
+		managed.dir_vars[candidate.dir_var] = true
+		managed.lib_vars[candidate.lib_var] = true
+		managed.lib_refs["$(" .. candidate.lib_var .. ")"] = true
+	end
+
+	return managed
+end
+
+local function is_managed_optional_library_recipe(line, managed, target)
+	for dir_var in pairs(managed.dir_vars) do
+		if target == "clean" and line == "\t$(MAKE) -C $(" .. dir_var .. ") clean" then
+			return true
+		end
+		if target == "fclean" and line == "\t$(MAKE) -C $(" .. dir_var .. ") fclean" then
+			return true
+		end
+	end
+
+	return false
+end
+
+local function strip_managed_optional_library_support(lines, cfg)
+	local managed = collect_optional_library_metadata(cfg)
+	local preserved_libs = {}
+	local preserved_seen = {}
+	local cleaned = {}
+	local i = 1
+
+	while i <= #lines do
+		local line = lines[i]
+		local assignment_name = extract_assignment_name(line)
+
+		if line == OPTIONAL_LIB_COMMENT or line == OPTIONAL_LIB_EMPTY_COMMENT then
+			i = i + 1
+		elseif assignment_name == "LIBS" then
+			local value = line:match("^[^=]+=%s*(.-)%s*$") or ""
+			for token in value:gmatch("%S+") do
+				if not managed.lib_refs[token] then
+					append_unique_token(preserved_libs, preserved_seen, token)
+				end
+			end
+			i = i + 1
+		elseif assignment_name and (managed.dir_vars[assignment_name] or managed.lib_vars[assignment_name]) then
+			i = i + 1
+		else
+			local build_target = false
+			for lib_var in pairs(managed.lib_vars) do
+				if line == "$(" .. lib_var .. "):" then
+					build_target = true
+					break
+				end
+			end
+
+			if build_target then
+				i = i + 1
+				while i <= #lines and (lines[i] == "" or lines[i]:match("^\t")) do
+					i = i + 1
+				end
+			elseif line:match("^clean%s*:") or line:match("^fclean%s*:") then
+				local target = line:match("^(%w+)%s*:")
+				table.insert(cleaned, line)
+				i = i + 1
+				while i <= #lines and (lines[i] == "" or lines[i]:match("^\t")) do
+					if not is_managed_optional_library_recipe(lines[i], managed, target) then
+						table.insert(cleaned, lines[i])
+					end
+					i = i + 1
+				end
+			else
+				table.insert(cleaned, line)
+				i = i + 1
+			end
+		end
+	end
+
+	return normalize_blank_lines(cleaned), preserved_libs
+end
+
+local function sync_optional_library_support(lines, project_root, cfg)
+	local optional_libs = detect_optional_libraries(project_root, cfg)
+	local rebuilt, preserved_libs = strip_managed_optional_library_support(lines, cfg)
+	local vars = build_optional_library_vars(optional_libs)
+	local libs_tokens = {}
+	local libs_seen = {}
+
+	for _, token in ipairs(preserved_libs) do
+		append_unique_token(libs_tokens, libs_seen, token)
+	end
+	for _, lib in ipairs(optional_libs) do
+		append_unique_token(libs_tokens, libs_seen, "$(" .. lib.lib_var .. ")")
+	end
+
+	vars[#vars] = (#libs_tokens > 0) and ("LIBS\t\t= " .. table.concat(libs_tokens, " ")) or "LIBS\t\t="
+
+	local insert_after = find_assignment_index(rebuilt, "RM")
+		or find_assignment_index(rebuilt, "DEBUG")
+		or find_assignment_index(rebuilt, "LDLIBS")
+		or find_assignment_index(rebuilt, "LDFLAGS")
 		or 1
 	local insert_at = insert_after + 1
 
-	if not find_exact_line(lines, "# Optional libs detected automatically.") then
-		insert_lines(lines, insert_at, { "", "# Optional libs detected automatically." })
-		insert_at = insert_at + 2
-		changed = true
-	end
+	insert_lines(rebuilt, insert_at, { "" })
+	insert_lines(rebuilt, insert_at + 1, vars)
+	insert_lines(rebuilt, insert_at + 1 + #vars, { "" })
 
-	for _, lib in ipairs(optional_libs) do
-		local dir_line = lib.dir_var .. "\t= " .. lib.dir
-		local lib_line = lib.lib_var .. "\t\t= $(" .. lib.dir_var .. ")/" .. lib.archive
-
-		if not find_assignment_index(lines, lib.dir_var) then
-			insert_lines(lines, insert_at, { dir_line })
-			insert_at = insert_at + 1
-			changed = true
-		end
-		if not find_assignment_index(lines, lib.lib_var) then
-			insert_lines(lines, insert_at, { lib_line })
-			insert_at = insert_at + 1
-			changed = true
-		end
-	end
-
-	local libs_refs = {}
-	for _, lib in ipairs(optional_libs) do
-		table.insert(libs_refs, "$(" .. lib.lib_var .. ")")
-	end
-
-	local libs_idx = find_assignment_index(lines, "LIBS")
-	if libs_idx then
-		for _, ref in ipairs(libs_refs) do
-			local updated = append_token(lines[libs_idx], ref)
-			if updated ~= lines[libs_idx] then
-				lines[libs_idx] = updated
-				changed = true
-			end
-		end
-	else
-		insert_lines(lines, insert_at, { "LIBS\t\t= " .. table.concat(libs_refs, " "), "" })
-		changed = true
-	end
-
-	for i, line in ipairs(lines) do
+	for i, line in ipairs(rebuilt) do
 		if line:match("^%$%(NAME%):") then
-			local updated = append_token(line, "$(LIBS)")
-			if updated ~= line then
-				lines[i] = updated
-				changed = true
-			end
+			rebuilt[i] = append_token(line, "$(LIBS)")
 			break
 		end
 	end
 
-	for i, line in ipairs(lines) do
+	for i, line in ipairs(rebuilt) do
 		if line:match("^\t%$%(CC%)") and line:find("-o $(NAME)", 1, true) then
-			local updated = replace_or_append_before(line, "$(LDLIBS)", "$(LIBS)")
-			if updated ~= line then
-				lines[i] = updated
-				changed = true
-			end
+			rebuilt[i] = replace_or_append_before(line, "$(LDLIBS)", "$(LIBS)")
 			break
 		end
 	end
 
-	local clean_idx = find_target_index(lines, "clean")
-	for _, lib in ipairs(optional_libs) do
-		local build_target = "$(" .. lib.lib_var .. "):"
-		local build_recipe = "\t$(MAKE) -C $(" .. lib.dir_var .. ")"
-		local clean_recipe = "\t$(MAKE) -C $(" .. lib.dir_var .. ") clean"
-		local fclean_recipe = "\t$(MAKE) -C $(" .. lib.dir_var .. ") fclean"
+	if #optional_libs > 0 then
+		local build_rules = {}
+		local clean_rules = {}
+		local fclean_rules = {}
 
-		if not find_target_index(lines, build_target) and clean_idx then
-			insert_lines(lines, clean_idx, { build_target, build_recipe, "" })
-			clean_idx = clean_idx + 3
-			changed = true
+		for _, lib in ipairs(optional_libs) do
+			table.insert(build_rules, "$(" .. lib.lib_var .. "):")
+			table.insert(build_rules, "\t$(MAKE) -C $(" .. lib.dir_var .. ")")
+			table.insert(build_rules, "")
+			table.insert(clean_rules, "\t$(MAKE) -C $(" .. lib.dir_var .. ") clean")
+			table.insert(fclean_rules, "\t$(MAKE) -C $(" .. lib.dir_var .. ") fclean")
 		end
 
-		if not find_exact_line(lines, clean_recipe) then
-			add_target_commands(lines, "clean", { clean_recipe })
-			changed = true
+		local clean_idx = find_target_index(rebuilt, "clean")
+		if clean_idx then
+			insert_lines(rebuilt, clean_idx, build_rules)
 		end
 
-		if not find_exact_line(lines, fclean_recipe) then
-			add_target_commands(lines, "fclean", { fclean_recipe })
-			changed = true
-		end
+		add_target_commands(rebuilt, "clean", clean_rules)
+		add_target_commands(rebuilt, "fclean", fclean_rules)
 	end
 
-	return changed
+	rebuilt = normalize_blank_lines(rebuilt)
+	if lines_equal(lines, rebuilt) then
+		return false
+	end
+
+	for i = #lines, 1, -1 do
+		lines[i] = nil
+	end
+	for _, line in ipairs(rebuilt) do
+		table.insert(lines, line)
+	end
+
+	return true
 end
 
 local function save_makefile(bufnr)
@@ -596,6 +641,134 @@ local function infer_library_name(current_name, project_root, override_name)
 		project_name = "lib" .. project_name
 	end
 	return project_name .. ".a"
+end
+
+local function is_library_mode(lines)
+	local name = get_assignment_value(lines, "NAME")
+	return type(name) == "string" and name:match("%.a$")
+end
+
+local function is_library_project(project_root, cfg)
+	local project_name = vim.fn.fnamemodify(project_root, ":t")
+
+	for _, candidate in ipairs(normalize_optional_library_candidates(cfg)) do
+		for _, dir in ipairs(candidate.dirs) do
+			if project_name == vim.fn.fnamemodify(dir, ":t") then
+				return true
+			end
+		end
+	end
+
+	return false
+end
+
+local function infer_project_library_name(project_root, cfg, current_name)
+	local project_name = vim.fn.fnamemodify(project_root, ":t")
+
+	for _, candidate in ipairs(normalize_optional_library_candidates(cfg)) do
+		for _, dir in ipairs(candidate.dirs) do
+			if project_name == vim.fn.fnamemodify(dir, ":t") then
+				local archive
+				if type(candidate.archives) == "table" then
+					archive = candidate.archives[dir]
+				end
+				archive = archive or candidate.archive
+				if archive and archive ~= "" then
+					return normalize_library_name(archive)
+				end
+			end
+		end
+	end
+
+	return infer_library_name(current_name, project_root, project_name)
+end
+
+local function ensure_parallel_re_rule(lines)
+	local re_idx = find_target_index(lines, "re")
+	if not re_idx then
+		return false
+	end
+
+	local end_idx = re_idx
+	while end_idx + 1 <= #lines and lines[end_idx + 1]:match("^\t") do
+		end_idx = end_idx + 1
+	end
+
+	local replacement = {
+		"re:",
+		"\t$(MAKE) fclean",
+		"\t$(MAKE) all",
+	}
+	local current = vim.list_slice(lines, re_idx, end_idx)
+	if lines_equal(current, replacement) then
+		return false
+	end
+
+	for i = end_idx, re_idx, -1 do
+		table.remove(lines, i)
+	end
+	for offset, line in ipairs(replacement) do
+		table.insert(lines, re_idx + offset - 1, line)
+	end
+
+	return true
+end
+
+local function has_non_header_body(lines)
+	local header = split_header(lines)
+	for i = #header + 1, #lines do
+		if lines[i] ~= "" then
+			return true
+		end
+	end
+	return false
+end
+
+local function build_default_makefile_body(project_root, cfg, existing_lines)
+	local src_dir = get_assignment_value(existing_lines, "SRC_DIR") or cfg.src_dir
+
+	if is_library_project(project_root, cfg) then
+		local debug_value = get_assignment_value(existing_lines, "DEBUG") or "0"
+		local current_name = get_assignment_value(existing_lines, "NAME")
+		local src_block = build_source_block(collect_formatted_sources(project_root, src_dir, cfg))
+		return build_library_template(infer_project_library_name(project_root, cfg, current_name), src_dir, src_block, debug_value)
+	end
+
+	local stub_lines = vim.split(cfg.makefile_stub, "\n")
+	sync_optional_library_support(stub_lines, project_root, cfg)
+	return stub_lines
+end
+
+local function ensure_generated_makefile(bufnr, project_root, cfg)
+	local existing_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+	if has_non_header_body(existing_lines) then
+		return false
+	end
+
+	local content = table.concat(existing_lines, "\n")
+	if not content:match("/%* %*+ %*/") and not content:match("^# %*+ #") then
+		if header42.ensure(bufnr) then
+			existing_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+		end
+	end
+
+	write_body_with_header(bufnr, build_default_makefile_body(project_root, cfg, existing_lines))
+	return true
+end
+
+local function sync_existing_makefile(bufnr, project_root, cfg)
+	local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+	local changed = ensure_parallel_re_rule(lines)
+
+	if not is_library_mode(lines) and not is_library_project(project_root, cfg) then
+		changed = sync_optional_library_support(lines, project_root, cfg) or changed
+	end
+
+	if changed then
+		vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+	end
+
+	return changed
 end
 
 local function ensure_debug_features(lines)
@@ -791,7 +964,15 @@ function M.background_sync(filepath)
 		vim.fn.bufload(bufnr)
 	end
 
-	local success, file_count, changed = M.update_sources(bufnr)
+	if not utils.is_in_active_dir(makefile_path, cfg.active_dirs) then
+		return
+	end
+
+	local changed = ensure_generated_makefile(bufnr, project_root, cfg)
+	changed = sync_existing_makefile(bufnr, project_root, cfg) or changed
+
+	local success, file_count, source_changed = M.update_sources(bufnr)
+	changed = changed or source_changed
 
 	-- Only notify if something actually changed
 	if success and changed and cfg.notify_on_sync then
@@ -822,46 +1003,24 @@ function M.generate(target)
 	end
 
 	local existing_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-	local content = table.concat(existing_lines, "\n")
-	if content:match("all:") or content:match("NAME%s*=") then
-		local optional_libs = detect_optional_libraries(project_root, cfg)
-		local lines = vim.deepcopy(existing_lines)
-		local changed = ensure_optional_library_support(lines, optional_libs)
+	if find_target_index(existing_lines, "all") or find_assignment_index(existing_lines, "NAME") then
+		local changed = sync_existing_makefile(bufnr, project_root, cfg)
 		if changed then
-			vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 			if save_makefile(bufnr) then
-				vim.notify("Makefile optional libs synced", vim.log.levels.INFO, { title = "dogshitnorm" })
+				vim.notify("Makefile synced", vim.log.levels.INFO, { title = "dogshitnorm" })
 			end
 			return true
 		end
-		if #optional_libs == 0 then
-			vim.notify(
-				"No optional libraries detected for this Makefile",
-				vim.log.levels.INFO,
-				{ title = "dogshitnorm" }
-			)
-		else
-			vim.notify("Makefile already has optional library support", vim.log.levels.INFO, { title = "dogshitnorm" })
-		end
+		vim.notify("Makefile already up to date", vim.log.levels.INFO, { title = "dogshitnorm" })
 		return false
 	end
 
-	if not content:match("/%* %*+ %*/") and not content:match("^# %*+ #") then
-		if header42.ensure(bufnr) then
-			existing_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-		end
+	if has_non_header_body(existing_lines) then
+		vim.notify("Makefile already has content; leaving it unchanged", vim.log.levels.INFO, { title = "dogshitnorm" })
+		return false
 	end
 
-	local lines = existing_lines
-	while #lines > 0 and lines[#lines]:match("^%s*$") do
-		table.remove(lines)
-	end
-	vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
-
-	local stub_lines = vim.split(cfg.makefile_stub, "\n")
-	inject_optional_library_support(stub_lines, detect_optional_libraries(project_root, cfg))
-	table.insert(stub_lines, 1, "")
-	vim.api.nvim_buf_set_lines(bufnr, -1, -1, false, stub_lines)
+	ensure_generated_makefile(bufnr, project_root, cfg)
 
 	vim.schedule(function()
 		vim.fn.cursor(1, 1)
