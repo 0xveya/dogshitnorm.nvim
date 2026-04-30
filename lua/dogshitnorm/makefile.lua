@@ -731,7 +731,12 @@ local function build_default_makefile_body(project_root, cfg, existing_lines)
 		local debug_value = get_assignment_value(existing_lines, "DEBUG") or "0"
 		local current_name = get_assignment_value(existing_lines, "NAME")
 		local src_block = build_source_block(collect_formatted_sources(project_root, src_dir, cfg))
-		return build_library_template(infer_project_library_name(project_root, cfg, current_name), src_dir, src_block, debug_value)
+		return build_library_template(
+			infer_project_library_name(project_root, cfg, current_name),
+			src_dir,
+			src_block,
+			debug_value
+		)
 	end
 
 	local stub_lines = vim.split(cfg.makefile_stub, "\n")
