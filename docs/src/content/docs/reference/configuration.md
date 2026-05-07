@@ -42,7 +42,7 @@ description: dogshitnorm.nvim options.
 - `makefile_stub`
 - `project_type`: `"auto"`, `"c"`, or `"python"`
 - `python_scaffold`: `"makefile"`, `"config"`, or `"full"`
-- `python_dirs`: case-insensitive folder globs for Python auto-detection, default `{ "*python*", "*py*", "*maze*", "*amaze*" }`
+- `python_dirs`: case-insensitive folder globs for Python auto-detection, default `{ "*python*", "*py*" }`
 - `c_dirs`: case-insensitive folder globs for C auto-detection
 - `python_version`: default `"3.10"`
 - `python_main`: default `"main.py"`

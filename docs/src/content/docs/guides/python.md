@@ -20,7 +20,7 @@ Run one of these inside the project:
 Auto-detection chooses Python when the project root contains `pyproject.toml`, `.python-version`, `uv.lock`, a top-level `.py` file, or a matching folder name. The default folder globs are:
 
 ```lua
-{ "*python*", "*py*", "*maze*", "*amaze*" }
+{ "*python*", "*py*" }
 ```
 
 ## Make Targets

@@ -173,7 +173,7 @@ For Python projects:
 
 `project_type = "auto"` detects Python from markers such as `pyproject.toml`,
 `.python-version`, `uv.lock`, top-level `*.py`, and folder globs like
-`*python*`, `*py*`, `*maze*`, and `*amaze*`. Use `:Makegen python` or
+`*python*` and `*py*`. Use `:Makegen python` or
 `:Makegen c` to force one Makefile kind. `:Pyprojectgen` writes the configured
 Python scaffold without changing C projects.
 

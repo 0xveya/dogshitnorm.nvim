@@ -8,7 +8,7 @@ local legacy_tmpdir = vim.fn.tempname()
 local libft_root = vim.fn.tempname()
 local libft_project = libft_root .. "/libft"
 local python_parent = vim.fn.tempname()
-local python_tmpdir = python_parent .. "/amaze_python"
+local python_tmpdir = python_parent .. "/sample_python"
 local forced_python_tmpdir = vim.fn.tempname()
 local protected_python_tmpdir = vim.fn.tempname()
 local makefile_only_tmpdir = vim.fn.tempname()
@@ -269,7 +269,7 @@ assert(python_gitignore:find(".coverage.*", 1, true), "Python .gitignore missing
 assert(python_gitignore:find(".env.*", 1, true), "Python .gitignore missing env files")
 assert(vim.fn.filereadable(python_tmpdir .. "/.editorconfig") == 1, "full scaffold missing .editorconfig")
 assert(vim.fn.filereadable(python_tmpdir .. "/main.py") == 1, "full scaffold missing main.py")
-assert(vim.fn.filereadable(python_tmpdir .. "/amaze_python/__init__.py") == 1, "full scaffold missing package")
+assert(vim.fn.filereadable(python_tmpdir .. "/sample_python/__init__.py") == 1, "full scaffold missing package")
 assert(vim.fn.isdirectory(python_tmpdir .. "/tests") == 1, "full scaffold missing tests directory")
 
 vim.cmd("edit " .. vim.fn.fnameescape(forced_python_tmpdir .. "/Makefile"))

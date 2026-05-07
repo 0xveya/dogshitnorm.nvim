@@ -50,7 +50,7 @@ Open a `Makefile` in a Python project folder and run:
 :Makegen python
 ```
 
-The default `python_scaffold = "full"` creates a Python Makefile, `pyproject.toml`, `.python-version`, `.gitignore`, `.editorconfig`, `main.py`, a package directory, and `tests/`. Auto-detection also picks Python for folders such as `amaze_python` or projects with `pyproject.toml`, `.python-version`, `uv.lock`, or top-level `.py` files.
+The default `python_scaffold = "full"` creates a Python Makefile, `pyproject.toml`, `.python-version`, `.gitignore`, `.editorconfig`, `main.py`, a package directory, and `tests/`. Auto-detection also picks Python for projects with `pyproject.toml`, `.python-version`, `uv.lock`, or top-level `.py` files.
 
 See [Python Projects](./python/) for the generated targets and scaffold modes.
 

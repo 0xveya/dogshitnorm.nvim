@@ -41,7 +41,7 @@ require("dogshitnorm").setup({
 
 ## Python projects
 
-`:Makegen` auto-detects Python from `pyproject.toml`, `.python-version`, `uv.lock`, top-level `*.py`, or folder-name globs. Defaults include `*python*`, `*py*`, `*maze*`, and `*amaze*`. Use `:Makegen python` to force Python generation and `:Makegen c` to force the existing C template.
+`:Makegen` auto-detects Python from `pyproject.toml`, `.python-version`, `uv.lock`, top-level `*.py`, or folder-name globs. Defaults include `*python*` and `*py*`. Use `:Makegen python` to force Python generation and `:Makegen c` to force the existing C template.
 
 The Python Makefile uses `uv` first and falls back to `python -m venv` plus `pip install -e ".[dev]"`. `make lint` is the 42 exact path and runs `flake8 .` plus `mypy` with the required PDF flags. `make format` and `make check-modern` keep the modern `ruff` and `ty` workflow separate.
 
