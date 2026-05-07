@@ -966,7 +966,11 @@ end
 function M.check_makefile(bufnr, diagnostics)
 	local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
 	local content = table.concat(lines, "\n")
-	local required_rules = { "all:", "clean:", "fclean:", "re:", "%$%(NAME%):" }
+	local is_python_makefile = content:find("MYPY_FLAGS", 1, true)
+		or content:match("\ninstall:")
+		or content:match("^install:")
+	local required_rules = is_python_makefile and { "install:", "run:", "debug:", "clean:", "lint:" }
+		or { "all:", "clean:", "fclean:", "re:", "%$%(NAME%):" }
 
 	for _, rule in ipairs(required_rules) do
 		if not content:match("\n" .. rule) and not content:match("^" .. rule) then
@@ -981,6 +985,46 @@ function M.check_makefile(bufnr, diagnostics)
 				message = "Makefile is missing mandatory rule: " .. clean_rule_name,
 			})
 		end
+	end
+
+	if is_python_makefile then
+		if not content:find("flake8 .", 1, true) then
+			table.insert(diagnostics, {
+				bufnr = bufnr,
+				lnum = 0,
+				col = 0,
+				severity = vim.diagnostic.severity.ERROR,
+				source = "norm-manual",
+				code = "MAKEFILE_PYTHON_LINT",
+				message = "Python Makefile lint target must run: flake8 .",
+			})
+		end
+		if
+			not content:find(
+				"mypy . --warn-return-any --warn-unused-ignores --ignore-missing-imports --disallow-untyped-defs --check-untyped-defs",
+				1,
+				true
+			)
+			and not (
+				content:find("mypy . $(MYPY_FLAGS)", 1, true)
+				and content:find(
+					"MYPY_FLAGS = --warn-return-any --warn-unused-ignores --ignore-missing-imports --disallow-untyped-defs --check-untyped-defs",
+					1,
+					true
+				)
+			)
+		then
+			table.insert(diagnostics, {
+				bufnr = bufnr,
+				lnum = 0,
+				col = 0,
+				severity = vim.diagnostic.severity.ERROR,
+				source = "norm-manual",
+				code = "MAKEFILE_PYTHON_LINT",
+				message = "Python Makefile lint target must run mypy with the required PDF flags.",
+			})
+		end
+		return
 	end
 
 	local first_rule_found = false

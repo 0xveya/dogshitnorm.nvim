@@ -81,6 +81,9 @@ Headers:
 Makefiles:
 
 - `:Makegen`
+- `:Makegen python`
+- `:Makegen c`
+- `:Pyprojectgen`
 - `:Makesync`
 - `:Makelib [name]`
 - `:Makedebug [toggle|on|off]`
@@ -127,6 +130,16 @@ Makefile options:
 - `makefile_optional_libs`
 - `src_dir`
 - `notify_on_sync`
+- `project_type`
+- `python_scaffold`
+- `python_dirs`
+- `c_dirs`
+- `python_version`
+- `python_main`
+- `python_package`
+- `python_formatter`
+- `python_typechecker`
+- `python_makefile_stub`
 
 See the web docs or README for the full option table and examples.
 
@@ -134,6 +147,8 @@ See the web docs or README for the full option table and examples.
 6. Makefiles                                        *dogshitnorm-makefiles*
 
 Generated Makefiles include:
+
+For C projects:
 
 - explicit `SRCS`
 - dependency files with `CPPFLAGS = -MMD -MP`
@@ -143,6 +158,20 @@ Generated Makefiles include:
 - `:Makelib` conversion for static libraries
 - `:Makedebug` to flip debug mode
 - `:Makestatus` to report binary/library and debug/deps state
+
+For Python projects:
+
+- `uv` first install/run/debug commands with pip/venv fallback
+- required 42 peer-evaluation `make lint` using exact `flake8 .` and `mypy`
+  flags
+- modern `ruff` and `ty` workflow through `format` and `check-modern`
+- optional scaffold controlled by `python_scaffold`
+
+`project_type = "auto"` detects Python from markers such as `pyproject.toml`,
+`.python-version`, `uv.lock`, top-level `*.py`, and folder globs like
+`*python*`, `*py*`, `*maze*`, and `*amaze*`. Use `:Makegen python` or
+`:Makegen c` to force one Makefile kind. `:Pyprojectgen` writes the configured
+Python scaffold without changing C projects.
 
 `makefile_exclude_dirs` defaults to ignoring:
 

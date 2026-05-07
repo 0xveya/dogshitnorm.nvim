@@ -146,7 +146,7 @@ function M.setup(opts)
 
 		if cfg.auto_42_header then
 			vim.api.nvim_create_autocmd("BufNewFile", {
-				pattern = { "*.c", "*.h", "*.cpp", "*.hpp", "Makefile", "makefile" },
+				pattern = { "*.c", "*.h", "*.cpp", "*.hpp" },
 				group = header_group,
 				callback = function(args)
 					vim.schedule(function()
@@ -157,7 +157,7 @@ function M.setup(opts)
 			})
 
 			vim.api.nvim_create_autocmd({ "BufEnter", "BufWinEnter" }, {
-				pattern = { "*.c", "*.h", "*.cpp", "*.hpp", "Makefile", "makefile" },
+				pattern = { "*.c", "*.h", "*.cpp", "*.hpp" },
 				group = header_group,
 				callback = function(args)
 					ensure_new_header(args.buf)
@@ -282,7 +282,18 @@ function M.setup(opts)
 	end
 
 	-- 9. User Commands
-	vim.api.nvim_create_user_command("Makegen", makefile.generate, {})
+	vim.api.nvim_create_user_command("Makegen", function(cmd_opts)
+		local arg = cmd_opts.args ~= "" and cmd_opts.args or nil
+		makefile.generate(nil, arg)
+	end, {
+		nargs = "?",
+		complete = function()
+			return { "python", "c" }
+		end,
+	})
+	vim.api.nvim_create_user_command("Pyprojectgen", function()
+		makefile.generate_python_project()
+	end, {})
 	vim.api.nvim_create_user_command("Makesync", function()
 		makefile.sync()
 	end, {})

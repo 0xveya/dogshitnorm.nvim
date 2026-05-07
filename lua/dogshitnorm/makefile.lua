@@ -1,5 +1,6 @@
 local config = require("dogshitnorm.config")
 local header42 = require("dogshitnorm.header42")
+local project = require("dogshitnorm.project")
 local utils = require("dogshitnorm.utils")
 
 local M = {}
@@ -724,6 +725,136 @@ local function has_non_header_body(lines)
 	return false
 end
 
+local function file_is_nonempty(path)
+	return vim.fn.filereadable(path) == 1 and vim.fn.getfsize(path) > 0
+end
+
+local function write_missing_or_empty(path, lines)
+	if file_is_nonempty(path) then
+		return false
+	end
+	vim.fn.mkdir(vim.fn.fnamemodify(path, ":h"), "p")
+	vim.fn.writefile(lines, path)
+	return true
+end
+
+local function build_pyproject(cfg, package_name)
+	local python_version = cfg.python_version or "3.10"
+	return {
+		"[project]",
+		'name = "' .. package_name .. '"',
+		'version = "0.1.0"',
+		'description = ""',
+		'readme = "README.md"',
+		'requires-python = ">=' .. python_version .. '"',
+		"dependencies = []",
+		"",
+		"[project.optional-dependencies]",
+		'dev = ["flake8", "mypy", "ruff", "ty", "pytest"]',
+		"",
+		"[project.scripts]",
+		package_name .. ' = "' .. package_name .. '.cli:main"',
+		"",
+		"[build-system]",
+		'requires = ["setuptools>=80"]',
+		'build-backend = "setuptools.build_meta"',
+		"",
+		"[tool.setuptools.packages.find]",
+		'include = ["' .. package_name .. '*"]',
+		'exclude = ["tests*"]',
+		"",
+		"[tool.ruff]",
+		"line-length = 100",
+		'target-version = "py' .. python_version:gsub("%.", "") .. '"',
+		"",
+		"[tool.ruff.lint]",
+		'select = ["E", "F", "I", "UP", "B"]',
+		'ignore = ["UP046"]',
+		"",
+		"[tool.ruff.format]",
+		'quote-style = "double"',
+		'indent-style = "space"',
+		"docstring-code-format = true",
+		'line-ending = "lf"',
+		"",
+		"[tool.mypy]",
+		'python_version = "' .. python_version .. '"',
+		"warn_return_any = true",
+		"warn_unused_ignores = true",
+		"ignore_missing_imports = true",
+		"disallow_untyped_defs = true",
+		"check_untyped_defs = true",
+		"",
+		"[tool.pytest.ini_options]",
+		'testpaths = ["tests"]',
+	}
+end
+
+local function scaffold_python_project(root, cfg, mode)
+	mode = mode or cfg.python_scaffold or "full"
+	if mode == "makefile" then
+		return
+	end
+
+	local package_name = project.infer_package(root, cfg)
+	write_missing_or_empty(root .. "/pyproject.toml", build_pyproject(cfg, package_name))
+	write_missing_or_empty(root .. "/.python-version", { cfg.python_version or "3.10" })
+	write_missing_or_empty(root .. "/.gitignore", {
+		".venv/",
+		"__pycache__/",
+		"*.py[cod]",
+		".mypy_cache/",
+		".ruff_cache/",
+		".pytest_cache/",
+		".ty/",
+		".coverage",
+		"dist/",
+		"build/",
+		"*.egg-info/",
+	})
+	write_missing_or_empty(root .. "/.editorconfig", {
+		"root = true",
+		"",
+		"[*]",
+		"charset = utf-8",
+		"end_of_line = lf",
+		"insert_final_newline = true",
+		"indent_style = tab",
+		"indent_size = 4",
+		"",
+		"[*.py]",
+		"indent_style = space",
+		"indent_size = 4",
+		"max_line_length = 100",
+	})
+
+	if mode ~= "full" then
+		return
+	end
+
+	write_missing_or_empty(root .. "/" .. (cfg.python_main or "main.py"), {
+		"from " .. package_name .. ".cli import main",
+		"",
+		"",
+		'if __name__ == "__main__":',
+		"    main()",
+	})
+	write_missing_or_empty(root .. "/" .. package_name .. "/__init__.py", { '"""' .. package_name .. ' package."""' })
+	write_missing_or_empty(root .. "/" .. package_name .. "/cli.py", {
+		"def main() -> None:",
+		"    pass",
+	})
+	vim.fn.mkdir(root .. "/tests", "p")
+end
+
+local function build_python_makefile_body(cfg)
+	local body = vim.split(cfg.python_makefile_stub, "\n")
+	while #body > 0 and body[#body] == "" do
+		table.remove(body)
+	end
+	return body
+end
+
 local function build_default_makefile_body(project_root, cfg, existing_lines)
 	local src_dir = get_assignment_value(existing_lines, "SRC_DIR") or cfg.src_dir
 
@@ -744,20 +875,27 @@ local function build_default_makefile_body(project_root, cfg, existing_lines)
 	return stub_lines
 end
 
-local function ensure_generated_makefile(bufnr, project_root, cfg)
+local function ensure_generated_makefile(bufnr, project_root, cfg, kind)
 	local existing_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
 	if has_non_header_body(existing_lines) then
 		return false
 	end
 
-	local content = table.concat(existing_lines, "\n")
-	if not content:match("/%* %*+ %*/") and not content:match("^# %*+ #") then
-		if header42.ensure(bufnr) then
-			existing_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+	if kind ~= "python" then
+		local content = table.concat(existing_lines, "\n")
+		if not content:match("/%* %*+ %*/") and not content:match("^# %*+ #") then
+			if header42.ensure(bufnr) then
+				existing_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+			end
 		end
 	end
 
-	write_body_with_header(bufnr, build_default_makefile_body(project_root, cfg, existing_lines))
+	if kind == "python" then
+		write_body_with_header(bufnr, build_python_makefile_body(cfg))
+		scaffold_python_project(project_root, cfg)
+	else
+		write_body_with_header(bufnr, build_default_makefile_body(project_root, cfg, existing_lines))
+	end
 	return true
 end
 
@@ -774,6 +912,21 @@ local function sync_existing_makefile(bufnr, project_root, cfg)
 	end
 
 	return changed
+end
+
+local function makefile_kind(lines, project_root, cfg, override)
+	local content = table.concat(lines, "\n")
+	if content:find("MYPY_FLAGS", 1, true) or content:match("\ninstall:") or content:match("^install:") then
+		return "python"
+	end
+	if find_assignment_index(lines, "NAME") or find_target_index(lines, "all") then
+		return "c"
+	end
+	return project.detect(project_root, cfg, override)
+end
+
+local function notify_c_only(command)
+	vim.notify(command .. " applies only to C Makefiles", vim.log.levels.INFO, { title = "dogshitnorm" })
 end
 
 local function ensure_debug_features(lines)
@@ -877,6 +1030,10 @@ function M.update_sources(target)
 
 	local bufnr = ctx.bufnr
 	local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+	if makefile_kind(lines, ctx.project_root, cfg) == "python" then
+		notify_c_only(":Makesync")
+		return false
+	end
 	local src_dir = utils.get_src_dir(ctx.makefile_path, cfg.src_dir)
 	local start_idx, end_idx = nil, nil
 
@@ -973,7 +1130,13 @@ function M.background_sync(filepath)
 		return
 	end
 
-	local changed = ensure_generated_makefile(bufnr, project_root, cfg)
+	local initial_kind = project.detect(project_root, cfg)
+	local changed = ensure_generated_makefile(bufnr, project_root, cfg, initial_kind)
+	local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+	local kind = makefile_kind(lines, project_root, cfg)
+	if kind == "python" then
+		return
+	end
 	changed = sync_existing_makefile(bufnr, project_root, cfg) or changed
 
 	local success, file_count, source_changed = M.update_sources(bufnr)
@@ -994,7 +1157,7 @@ function M.background_sync(filepath)
 	end
 end
 
-function M.generate(target)
+function M.generate(target, override)
 	local cfg = config.get()
 	local bufnr = resolve_generate_bufnr(target)
 	local filepath = vim.api.nvim_buf_get_name(bufnr)
@@ -1008,6 +1171,16 @@ function M.generate(target)
 	end
 
 	local existing_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+	local kind = makefile_kind(existing_lines, project_root, cfg, override)
+	if kind == "python" then
+		if has_non_header_body(existing_lines) then
+			vim.notify("Makefile already has content; leaving it unchanged", vim.log.levels.INFO, { title = "dogshitnorm" })
+			return false
+		end
+		ensure_generated_makefile(bufnr, project_root, cfg, "python")
+		return true
+	end
+
 	if find_target_index(existing_lines, "all") or find_assignment_index(existing_lines, "NAME") then
 		local changed = sync_existing_makefile(bufnr, project_root, cfg)
 		if changed then
@@ -1025,7 +1198,7 @@ function M.generate(target)
 		return false
 	end
 
-	ensure_generated_makefile(bufnr, project_root, cfg)
+	ensure_generated_makefile(bufnr, project_root, cfg, "c")
 
 	vim.schedule(function()
 		vim.fn.cursor(1, 1)
@@ -1033,6 +1206,21 @@ function M.generate(target)
 			vim.cmd("normal! $")
 		end
 	end)
+end
+
+function M.generate_python_project(target)
+	local cfg = config.get()
+	local bufnr = resolve_generate_bufnr(target)
+	local filepath = vim.api.nvim_buf_get_name(bufnr)
+	local root = filepath ~= "" and vim.fn.fnamemodify(filepath, ":h") or vim.fn.getcwd()
+	if filepath:match("[Mm]akefile$") then
+		root = vim.fn.fnamemodify(filepath, ":h")
+	elseif vim.fn.isdirectory(filepath) == 1 then
+		root = filepath
+	end
+	scaffold_python_project(root, cfg, cfg.python_scaffold)
+	vim.notify("Python project scaffold generated", vim.log.levels.INFO, { title = "dogshitnorm" })
+	return true
 end
 
 function M.convert_to_library(target, library_name)
@@ -1043,6 +1231,10 @@ function M.convert_to_library(target, library_name)
 	end
 
 	local lines = vim.api.nvim_buf_get_lines(ctx.bufnr, 0, -1, false)
+	if makefile_kind(lines, ctx.project_root, cfg) == "python" then
+		notify_c_only(":Makelib")
+		return false
+	end
 	local src_dir = get_assignment_value(lines, "SRC_DIR") or utils.get_src_dir(ctx.makefile_path, cfg.src_dir)
 	local current_name = get_assignment_value(lines, "NAME")
 	local debug_value = get_assignment_value(lines, "DEBUG") or "0"
@@ -1059,12 +1251,17 @@ function M.convert_to_library(target, library_name)
 end
 
 function M.set_debug(target, mode)
+	local cfg = config.get()
 	local ctx = get_makefile_context(target, true)
 	if not ctx then
 		return false
 	end
 
 	local lines = vim.api.nvim_buf_get_lines(ctx.bufnr, 0, -1, false)
+	if makefile_kind(lines, ctx.project_root, cfg) == "python" then
+		notify_c_only(":Makedebug")
+		return false
+	end
 	local debug_idx = ensure_debug_features(lines)
 	local current_value = lines[debug_idx]:match("=%s*(.-)%s*$") or "0"
 	local normalized = tostring(mode or "toggle"):lower()
@@ -1103,6 +1300,10 @@ function M.show_status(target)
 	end
 
 	local lines = vim.api.nvim_buf_get_lines(ctx.bufnr, 0, -1, false)
+	if makefile_kind(lines, ctx.project_root, config.get()) == "python" then
+		vim.notify("Makefile status: python target", vim.log.levels.INFO, { title = "dogshitnorm" })
+		return true
+	end
 	local name = get_assignment_value(lines, "NAME") or "unknown"
 	local debug_value = get_assignment_value(lines, "DEBUG") or "0"
 	local cppflags = get_assignment_value(lines, "CPPFLAGS") or ""

@@ -3,9 +3,9 @@ title: Makefiles
 description: Generate and manage 42-style Makefiles with source syncing and library ergonomics.
 ---
 
-## Generated template
+## Generated C template
 
-The default generated Makefile includes:
+The default C Makefile includes:
 
 - explicit `SRCS`
 - `CPPFLAGS = -MMD -MP`
@@ -39,13 +39,32 @@ require("dogshitnorm").setup({
 })
 ```
 
+## Python projects
+
+`:Makegen` auto-detects Python from `pyproject.toml`, `.python-version`, `uv.lock`, top-level `*.py`, or folder-name globs. Defaults include `*python*`, `*py*`, `*maze*`, and `*amaze*`. Use `:Makegen python` to force Python generation and `:Makegen c` to force the existing C template.
+
+The Python Makefile uses `uv` first and falls back to `python -m venv` plus `pip install -e ".[dev]"`. `make lint` is the 42 exact path and runs `flake8 .` plus `mypy` with the required PDF flags. `make format` and `make check-modern` keep the modern `ruff` and `ty` workflow separate.
+
+`python_scaffold` controls how much gets created:
+
+- `"makefile"` creates only the Makefile
+- `"config"` creates the Makefile plus `pyproject.toml`, `.python-version`, `.gitignore`, and `.editorconfig`
+- `"full"` also creates `main.py`, the inferred package directory, `cli.py`, and `tests/`
+
+`:Pyprojectgen` writes the configured Python scaffold files without changing C generation behavior.
+
 ## Commands
 
-- `:Makegen` inserts the Makefile stub
-- `:Makesync` syncs `SRCS` with the files under `SRC_DIR`
+- `:Makegen` inserts an auto-detected C or Python Makefile
+- `:Makegen python` forces the Python Makefile
+- `:Makegen c` forces the C Makefile
+- `:Pyprojectgen` creates Python scaffold files
+- `:Makesync` syncs `SRCS` with the files under `SRC_DIR` for C Makefiles
 - `:Makelib [name]` rewrites the Makefile into static-library mode
 - `:Makedebug [toggle|on|off]` flips debug mode
 - `:Makestatus` reports current target mode and debug/deps state
+
+`:Makesync`, `:Makelib`, and `:Makedebug` are C-only and notify when used on a Python Makefile.
 
 ## Excluding directories
 

@@ -25,6 +25,9 @@ description: Exposed commands and their intended use.
 ## Makefile commands
 
 - `:Makegen`
+- `:Makegen python`
+- `:Makegen c`
+- `:Pyprojectgen`
 - `:Makesync`
 - `:Makelib [name]`
 - `:Makedebug [toggle|on|off]`

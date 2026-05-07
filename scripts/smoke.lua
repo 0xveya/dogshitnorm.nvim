@@ -7,6 +7,12 @@ local custom_tmpdir = vim.fn.tempname()
 local legacy_tmpdir = vim.fn.tempname()
 local libft_root = vim.fn.tempname()
 local libft_project = libft_root .. "/libft"
+local python_parent = vim.fn.tempname()
+local python_tmpdir = python_parent .. "/amaze_python"
+local forced_python_tmpdir = vim.fn.tempname()
+local protected_python_tmpdir = vim.fn.tempname()
+local makefile_only_tmpdir = vim.fn.tempname()
+local config_only_tmpdir = vim.fn.tempname()
 
 local function write_demo_project(dir)
 	vim.fn.mkdir(dir, "p")
@@ -33,6 +39,17 @@ write_demo_project(nolib_tmpdir)
 write_demo_project(custom_tmpdir)
 write_demo_project(legacy_tmpdir)
 write_demo_project(libft_project)
+vim.fn.mkdir(python_tmpdir, "p")
+vim.fn.writefile({}, python_tmpdir .. "/Makefile")
+vim.fn.mkdir(forced_python_tmpdir, "p")
+vim.fn.writefile({}, forced_python_tmpdir .. "/Makefile")
+vim.fn.mkdir(protected_python_tmpdir, "p")
+vim.fn.writefile({}, protected_python_tmpdir .. "/Makefile")
+vim.fn.writefile({ "keep me" }, protected_python_tmpdir .. "/pyproject.toml")
+vim.fn.mkdir(makefile_only_tmpdir, "p")
+vim.fn.writefile({}, makefile_only_tmpdir .. "/Makefile")
+vim.fn.mkdir(config_only_tmpdir, "p")
+vim.fn.writefile({}, config_only_tmpdir .. "/Makefile")
 
 vim.fn.mkdir(tmpdir .. "/libft", "p")
 vim.fn.mkdir(tmpdir .. "/ft_printf", "p")
@@ -70,7 +87,19 @@ vim.fn.writefile({
 }, legacy_tmpdir .. "/Makefile")
 
 require("dogshitnorm").setup({
-	active_dirs = { root, tmpdir, nolib_tmpdir, custom_tmpdir, legacy_tmpdir, libft_root },
+	active_dirs = {
+		root,
+		tmpdir,
+		nolib_tmpdir,
+		custom_tmpdir,
+		legacy_tmpdir,
+		libft_root,
+		python_parent,
+		forced_python_tmpdir,
+		protected_python_tmpdir,
+		makefile_only_tmpdir,
+		config_only_tmpdir,
+	},
 	notify_on_sync = false,
 })
 
@@ -114,7 +143,19 @@ require("dogshitnorm.makefile").generate(0)
 vim.cmd("write")
 
 require("dogshitnorm.config").setup({
-	active_dirs = { root, tmpdir, nolib_tmpdir, custom_tmpdir, legacy_tmpdir, libft_root },
+	active_dirs = {
+		root,
+		tmpdir,
+		nolib_tmpdir,
+		custom_tmpdir,
+		legacy_tmpdir,
+		libft_root,
+		python_parent,
+		forced_python_tmpdir,
+		protected_python_tmpdir,
+		makefile_only_tmpdir,
+		config_only_tmpdir,
+	},
 	notify_on_sync = false,
 	makefile_optional_libs = {
 		{
@@ -139,7 +180,19 @@ require("dogshitnorm.makefile").generate(0)
 vim.cmd("write")
 
 require("dogshitnorm.config").setup({
-	active_dirs = { root, tmpdir, nolib_tmpdir, custom_tmpdir, legacy_tmpdir, libft_root },
+	active_dirs = {
+		root,
+		tmpdir,
+		nolib_tmpdir,
+		custom_tmpdir,
+		legacy_tmpdir,
+		libft_root,
+		python_parent,
+		forced_python_tmpdir,
+		protected_python_tmpdir,
+		makefile_only_tmpdir,
+		config_only_tmpdir,
+	},
 	notify_on_sync = false,
 })
 
@@ -187,3 +240,76 @@ assert(
 	legacy_makefile:find("%$%(CC%) %$%(CFLAGS%) %$%(LDFLAGS%) %$%(OBJS%) %$%(LIBS%) %$%(LDLIBS%) %-o %$%(NAME%)"),
 	"existing Makefile link line did not gain LIBS"
 )
+
+vim.cmd("edit " .. vim.fn.fnameescape(python_tmpdir .. "/Makefile"))
+vim.cmd("Makegen")
+vim.cmd("write")
+local python_makefile = table.concat(vim.fn.readfile(python_tmpdir .. "/Makefile"), "\n")
+assert(python_makefile:find("install:", 1, true), "python folder did not generate install target")
+assert(python_makefile:find("run:", 1, true), "python folder did not generate run target")
+assert(python_makefile:find("debug:", 1, true), "python folder did not generate debug target")
+assert(python_makefile:find("clean:", 1, true), "python folder did not generate clean target")
+assert(python_makefile:find("lint:", 1, true), "python folder did not generate lint target")
+assert(python_makefile:find("flake8 .", 1, true), "python lint does not run flake8 .")
+assert(
+	python_makefile:find(
+		"mypy . --warn-return-any --warn-unused-ignores --ignore-missing-imports --disallow-untyped-defs --check-untyped-defs",
+		1,
+		true
+	),
+	"python lint does not include exact mypy flags"
+)
+assert(vim.fn.filereadable(python_tmpdir .. "/pyproject.toml") == 1, "full scaffold missing pyproject.toml")
+assert(vim.fn.filereadable(python_tmpdir .. "/.python-version") == 1, "full scaffold missing .python-version")
+assert(vim.fn.filereadable(python_tmpdir .. "/.gitignore") == 1, "full scaffold missing .gitignore")
+assert(vim.fn.filereadable(python_tmpdir .. "/.editorconfig") == 1, "full scaffold missing .editorconfig")
+assert(vim.fn.filereadable(python_tmpdir .. "/main.py") == 1, "full scaffold missing main.py")
+assert(vim.fn.filereadable(python_tmpdir .. "/amaze_python/__init__.py") == 1, "full scaffold missing package")
+assert(vim.fn.isdirectory(python_tmpdir .. "/tests") == 1, "full scaffold missing tests directory")
+
+vim.cmd("edit " .. vim.fn.fnameescape(forced_python_tmpdir .. "/Makefile"))
+vim.cmd("Makegen python")
+vim.cmd("write")
+local forced_python_makefile = table.concat(vim.fn.readfile(forced_python_tmpdir .. "/Makefile"), "\n")
+assert(forced_python_makefile:find("install:", 1, true), "Makegen python did not force Python Makefile")
+
+vim.cmd("edit " .. vim.fn.fnameescape(protected_python_tmpdir .. "/Makefile"))
+vim.cmd("Makegen python")
+vim.cmd("write")
+assert(
+	table.concat(vim.fn.readfile(protected_python_tmpdir .. "/pyproject.toml"), "\n") == "keep me",
+	"non-empty pyproject.toml was overwritten"
+)
+
+require("dogshitnorm.config").setup({
+	active_dirs = { makefile_only_tmpdir },
+	notify_on_sync = false,
+	python_scaffold = "makefile",
+})
+vim.cmd("edit " .. vim.fn.fnameescape(makefile_only_tmpdir .. "/Makefile"))
+vim.cmd("Makegen python")
+vim.cmd("write")
+assert(vim.fn.filereadable(makefile_only_tmpdir .. "/pyproject.toml") == 0, "makefile scaffold created config")
+
+require("dogshitnorm.config").setup({
+	active_dirs = { config_only_tmpdir },
+	notify_on_sync = false,
+	python_scaffold = "config",
+})
+vim.cmd("edit " .. vim.fn.fnameescape(config_only_tmpdir .. "/Makefile"))
+vim.cmd("Makegen python")
+vim.cmd("write")
+assert(vim.fn.filereadable(config_only_tmpdir .. "/pyproject.toml") == 1, "config scaffold missing pyproject")
+assert(vim.fn.filereadable(config_only_tmpdir .. "/main.py") == 0, "config scaffold created main.py")
+assert(vim.fn.isdirectory(config_only_tmpdir .. "/" .. vim.fn.fnamemodify(config_only_tmpdir, ":t")) == 0, "config scaffold created package")
+
+require("dogshitnorm.config").setup({
+	active_dirs = { python_parent },
+	notify_on_sync = false,
+})
+vim.cmd("edit " .. vim.fn.fnameescape(python_tmpdir .. "/Makefile"))
+vim.cmd("Makesync")
+vim.cmd("write")
+local after_makesync = table.concat(vim.fn.readfile(python_tmpdir .. "/Makefile"), "\n")
+assert(after_makesync:find("install:", 1, true), "Makesync damaged Python Makefile")
+assert(not after_makesync:find("NAME\t\t=", 1, true), "Makesync rewrote Python Makefile as C")
