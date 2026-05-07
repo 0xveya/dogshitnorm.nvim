@@ -966,6 +966,8 @@ end
 function M.check_makefile(bufnr, diagnostics)
 	local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
 	local content = table.concat(lines, "\n")
+	local required_mypy_flags = "--warn-return-any --warn-unused-ignores --ignore-missing-imports "
+		.. "--disallow-untyped-defs --check-untyped-defs"
 	local is_python_makefile = content:find("MYPY_FLAGS", 1, true)
 		or content:match("\ninstall:")
 		or content:match("^install:")
@@ -1000,18 +1002,10 @@ function M.check_makefile(bufnr, diagnostics)
 			})
 		end
 		if
-			not content:find(
-				"mypy . --warn-return-any --warn-unused-ignores --ignore-missing-imports --disallow-untyped-defs --check-untyped-defs",
-				1,
-				true
-			)
+			not content:find("mypy . " .. required_mypy_flags, 1, true)
 			and not (
 				content:find("mypy . $(MYPY_FLAGS)", 1, true)
-				and content:find(
-					"MYPY_FLAGS = --warn-return-any --warn-unused-ignores --ignore-missing-imports --disallow-untyped-defs --check-untyped-defs",
-					1,
-					true
-				)
+				and content:find("MYPY_FLAGS = " .. required_mypy_flags, 1, true)
 			)
 		then
 			table.insert(diagnostics, {
