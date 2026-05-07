@@ -1,5 +1,6 @@
 local config = require("dogshitnorm.config")
 local diagnostics = require("dogshitnorm.diagnostics")
+local project = require("dogshitnorm.project")
 local utils = require("dogshitnorm.utils")
 
 local M = {}
@@ -199,6 +200,14 @@ local function collect_manual_diagnostics(bufnr, filename, kind)
 	return manual_diagnostics
 end
 
+local function is_python_makefile(filename, cfg)
+	if not filename:match("[Mm]akefile$") then
+		return false
+	end
+	local root = vim.fn.fnamemodify(filename, ":h")
+	return project.detect(root, cfg) == "python"
+end
+
 local function resolve_target(bufnr)
 	local cfg = config.get()
 	if not cfg.active then
@@ -225,6 +234,10 @@ local function resolve_target(bufnr)
 
 	local kind = target_kind(filename)
 	if not kind then
+		return nil
+	end
+	if kind == "makefile" and is_python_makefile(filename, cfg) then
+		vim.diagnostic.set(utils.ns_id, bufnr, {})
 		return nil
 	end
 

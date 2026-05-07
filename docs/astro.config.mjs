@@ -19,6 +19,7 @@ export default defineConfig({
 						{ label: 'Getting Started', slug: 'guides/getting-started' },
 						{ label: 'Headers', slug: 'guides/headers' },
 						{ label: 'Makefiles', slug: 'guides/makefiles' },
+						{ label: 'Python Projects', slug: 'guides/python' },
 					],
 				},
 				{

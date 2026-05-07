@@ -1,6 +1,6 @@
 ---
 title: Getting Started
-description: Install dogshitnorm.nvim and replace separate 42 header plugins with one setup.
+description: Install dogshitnorm.nvim for 42 C workflows and optional Python project scaffolding.
 ---
 
 ## Install
@@ -36,10 +36,23 @@ vim.g.mail42 = "sfurst@student.42vienna.com"
 ## Default workflow
 
 - Open a new `.c`, `.h`, `.cpp`, `.hpp`, or `Makefile` buffer inside an active 42 directory.
-- The plugin inserts the native 42 header automatically, even when the plugin was lazy-loaded on filetype after the new buffer was already opened.
+- C-like files get the native 42 header automatically, even when the plugin was lazy-loaded on filetype after the new buffer was already opened.
+- Python files and Python-project Makefiles do not get 42 headers or norminette runs.
 - Saving refreshes the `Updated:` line.
 - `:Makesync` keeps `SRCS` in sync with `SRC_DIR`.
 - `:NormFix` and LSP code actions apply safe file-level fixes.
+
+## Python projects
+
+Open a `Makefile` in a Python project folder and run:
+
+```vim
+:Makegen python
+```
+
+The default `python_scaffold = "full"` creates a Python Makefile, `pyproject.toml`, `.python-version`, `.gitignore`, `.editorconfig`, `main.py`, a package directory, and `tests/`. Auto-detection also picks Python for folders such as `amaze_python` or projects with `pyproject.toml`, `.python-version`, `uv.lock`, or top-level `.py` files.
+
+See [Python Projects](./python/) for the generated targets and scaffold modes.
 
 ## Replace older setup
 

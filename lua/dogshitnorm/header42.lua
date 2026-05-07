@@ -1,4 +1,5 @@
 local config = require("dogshitnorm.config")
+local project = require("dogshitnorm.project")
 local utils = require("dogshitnorm.utils")
 
 local M = {}
@@ -73,6 +74,13 @@ end
 
 local function is_supported_path(path)
 	return path:match("[Mm]akefile$") or path:match("%.[ch]$") or path:match("%.[ch]pp$")
+end
+
+local function is_python_makefile_path(path)
+	if not path:match("[Mm]akefile$") then
+		return false
+	end
+	return project.detect(vim.fn.fnamemodify(path, ":h"), config.get()) == "python"
 end
 
 local function get_win_var(winid, name)
@@ -568,7 +576,12 @@ local function collect_bulk_targets(root)
 
 	for _, match in ipairs(matches) do
 		local filepath = utils.normalize_path(match)
-		if not seen[filepath] and vim.fn.filereadable(filepath) == 1 and is_supported_path(filepath) then
+		if
+			not seen[filepath]
+			and vim.fn.filereadable(filepath) == 1
+			and is_supported_path(filepath)
+			and not is_python_makefile_path(filepath)
+		then
 			seen[filepath] = true
 			table.insert(files, filepath)
 		end

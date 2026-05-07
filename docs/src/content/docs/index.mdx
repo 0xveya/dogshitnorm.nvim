@@ -19,14 +19,17 @@ import { Card, CardGrid } from '@astrojs/starlight/components';
 ## What it does
 
 <CardGrid stagger>
-	<Card title="Norminette" icon="report">
+	<Card title="Norminette" icon="approve-check-circle">
 		Run `norminette` asynchronously and show diagnostics directly in Neovim.
 	</Card>
-	<Card title="42 Headers" icon="paintbrush">
+	<Card title="42 Headers" icon="document">
 		Insert, update, and visually style native 42 headers without depending on a separate header plugin.
 	</Card>
 	<Card title="Makefiles" icon="seti:makefile">
-		Generate 42-friendly Makefiles, sync explicit `SRCS`, toggle debug mode, and switch to static-library mode.
+		Generate C and Python Makefiles, sync explicit `SRCS` for C, and scaffold Python projects.
+	</Card>
+	<Card title="Python" icon="seti:python">
+		Create `uv`-first Python projects with pip fallback, 42 lint targets, and modern Ruff/Ty tooling.
 	</Card>
 	<Card title="Quick Fixes" icon="pencil">
 		Apply header guard fixes, include sorting, prototype sorting, whitespace cleanup, and safe line-saving actions.

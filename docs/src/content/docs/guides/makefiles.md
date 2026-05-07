@@ -64,7 +64,7 @@ The Python Makefile uses `uv` first and falls back to `python -m venv` plus `pip
 - `:Makedebug [toggle|on|off]` flips debug mode
 - `:Makestatus` reports current target mode and debug/deps state
 
-`:Makesync`, `:Makelib`, and `:Makedebug` are C-only and notify when used on a Python Makefile.
+`:Makesync`, `:Makelib`, and `:Makedebug` are C-only and notify when used on a Python Makefile. Python files and Python-project Makefiles do not get 42 headers and do not run norminette.
 
 ## Excluding directories
 

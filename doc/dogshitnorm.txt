@@ -1,4 +1,4 @@
-*dogshitnorm.txt*            dogshitnorm.nvim             Last change: 2026 April 25
+*dogshitnorm.txt*            dogshitnorm.nvim               Last change: 2026 May 07
 
 ==============================================================================
 CONTENTS                                                 *dogshitnorm-contents*
@@ -14,12 +14,14 @@ CONTENTS                                                 *dogshitnorm-contents*
 ==============================================================================
 1. Introduction                                         *dogshitnorm-intro*
 
-dogshitnorm.nvim is a Neovim plugin for 42-style C projects. It combines:
+dogshitnorm.nvim is a Neovim plugin for 42-style C projects, with optional
+42 Python project generation. It combines:
 
 - asynchronous `norminette` diagnostics
 - safe code actions and quick fixes
 - Makefile generation and source syncing
 - native 42 header insertion and update
+- Python Makefile and scaffold generation
 - header guard, include, define, and prototype helpers
 - visual 42 header styling
 
@@ -32,6 +34,8 @@ https://0xveya.github.io/dogshitnorm.nvim/
 - Neovim 0.10+
 - `norminette` in `$PATH`
 - Tree-sitter C parser for the full custom diagnostics
+- Python tooling is optional; generated Python Makefiles prefer `uv` and fall
+  back to `python -m venv` plus pip
 
 ==============================================================================
 3. Installation                                    *dogshitnorm-installation*
@@ -173,6 +177,10 @@ For Python projects:
 `:Makegen c` to force one Makefile kind. `:Pyprojectgen` writes the configured
 Python scaffold without changing C projects.
 
+Python files and Python-project Makefiles do not get 42 headers and do not run
+norminette. C-only commands such as `:Makesync`, `:Makelib`, and `:Makedebug`
+notify instead of rewriting Python Makefiles.
+
 `makefile_exclude_dirs` defaults to ignoring:
 
 - `.git`
@@ -186,7 +194,7 @@ Python scaffold without changing C projects.
 ==============================================================================
 7. Headers                                            *dogshitnorm-headers*
 
-dogshitnorm.nvim can insert the standard 42 header for C-like files and
+dogshitnorm.nvim can insert the standard 42 header for C-like files and C
 Makefiles without depending on `42Paris/42header`.
 
 Identity is resolved from, in order:

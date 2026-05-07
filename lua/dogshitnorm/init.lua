@@ -7,6 +7,7 @@ local fixes = require("dogshitnorm.fixes")
 local linecount = require("dogshitnorm.linecount")
 local linesavers = require("dogshitnorm.linesavers")
 local lsp = require("dogshitnorm.lsp")
+local project = require("dogshitnorm.project")
 local utils = require("dogshitnorm.utils")
 
 local M = {}
@@ -28,6 +29,17 @@ local function is_in_makefile_src(filepath, cfg)
 	local target = utils.normalize_path(filepath)
 
 	return target == source_root or vim.startswith(target, source_root .. "/")
+end
+
+local function is_c_header_target(filepath, cfg)
+	if filepath:match("%.[ch]$") or filepath:match("%.[ch]pp$") then
+		return true
+	end
+	if filepath:match("[Mm]akefile$") then
+		local root = vim.fn.fnamemodify(filepath, ":h")
+		return project.detect(root, cfg) ~= "python"
+	end
+	return false
 end
 
 function M.setup(opts)
@@ -170,7 +182,9 @@ function M.setup(opts)
 				pattern = { "*.c", "*.h", "*.cpp", "*.hpp", "Makefile", "makefile" },
 				group = header_group,
 				callback = function(args)
-					header42.touch(args.buf)
+					if is_c_header_target(vim.api.nvim_buf_get_name(args.buf), cfg) then
+						header42.touch(args.buf)
+					end
 				end,
 			})
 		end
@@ -182,7 +196,9 @@ function M.setup(opts)
 					pattern = { "*.c", "*.h", "*.cpp", "*.hpp", "Makefile", "makefile" },
 					group = header_group,
 					callback = function(args)
-						sync_header_views(args.buf)
+						if is_c_header_target(vim.api.nvim_buf_get_name(args.buf), cfg) then
+							sync_header_views(args.buf)
+						end
 					end,
 				}
 			)
@@ -198,6 +214,9 @@ function M.setup(opts)
 				pattern = { "*.c", "*.h", "*.cpp", "*.hpp", "Makefile", "makefile" },
 				group = header_group,
 				callback = function(args)
+					if not is_c_header_target(vim.api.nvim_buf_get_name(args.buf), cfg) then
+						return
+					end
 					vim.schedule(function()
 						if vim.api.nvim_buf_is_valid(args.buf) then
 							header42.sync_windows(args.buf)
