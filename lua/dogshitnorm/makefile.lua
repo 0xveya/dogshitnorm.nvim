@@ -1174,7 +1174,11 @@ function M.generate(target, override)
 	local kind = makefile_kind(existing_lines, project_root, cfg, override)
 	if kind == "python" then
 		if has_non_header_body(existing_lines) then
-			vim.notify("Makefile already has content; leaving it unchanged", vim.log.levels.INFO, { title = "dogshitnorm" })
+			vim.notify(
+				"Makefile already has content; leaving it unchanged",
+				vim.log.levels.INFO,
+				{ title = "dogshitnorm" }
+			)
 			return false
 		end
 		ensure_generated_makefile(bufnr, project_root, cfg, "python")
