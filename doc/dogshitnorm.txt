@@ -147,6 +147,25 @@ Makefile options:
 
 See the web docs or README for the full option table and examples.
 
+Python project defaults:
+
+>lua
+project_type = "auto"
+python_scaffold = "full"
+python_dirs = { "*python*", "*py*" }
+c_dirs = {}
+python_version = "3.10"
+python_main = "main.py"
+python_package = nil
+python_formatter = "ruff"
+python_typechecker = "ty"
+<
+
+Change `python_version` when a subject requires a different Python version.
+Change `python_package` when the import package should differ from the folder
+name. Use `python_scaffold = "makefile"` for only the Makefile, `"config"`
+for config files, or `"full"` for config plus starter source and tests.
+
 ==============================================================================
 6. Makefiles                                        *dogshitnorm-makefiles*
 

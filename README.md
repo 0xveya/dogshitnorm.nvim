@@ -81,6 +81,15 @@ Using [lazy.nvim]():
         -- Makefile settings
         auto_makefile = true,
         makefile_keybinding = "<leader>cm",
+        project_type = "auto",
+        python_scaffold = "full",
+        python_dirs = { "*python*", "*py*" },
+        c_dirs = {},
+        python_version = "3.10",
+        python_main = "main.py",
+        python_package = nil,
+        python_formatter = "ruff",
+        python_typechecker = "ty",
         
         -- Makefile Sync settings
         auto_sync_makefile = true,
@@ -185,9 +194,9 @@ Using [lazy.nvim]():
 | `python_scaffold` | `string` | `"full"` | Python scaffold mode: `"makefile"`, `"config"`, or `"full"`. |
 | `python_dirs` | `table` | `{"*python*","*py*"}` | Case-insensitive folder globs that auto-detect Python projects. |
 | `c_dirs` | `table` | `{}` | Case-insensitive folder globs that force C during auto-detection. |
-| `python_version` | `string` | `"3.10"` | Version used for `.python-version` and `requires-python`. |
-| `python_main` | `string` | `"main.py"` | Python Makefile `MAIN` entry and scaffold entrypoint. |
-| `python_package` | `string` | `nil` | Package name; inferred from folder name when unset. |
+| `python_version` | `string` | `"3.10"` | Version used for `.python-version`, `requires-python`, Ruff target, and mypy config. Override this per subject, e.g. `"3.12"`. |
+| `python_main` | `string` | `"main.py"` | Python Makefile `MAIN` entry and scaffold entrypoint. Set this to `app.py` or similar for custom layouts. |
+| `python_package` | `string` | `nil` | Package name; inferred from folder name when unset. Set this when folder and import package differ. |
 | `python_formatter` | `string` | `"ruff"` | Python formatter preference for generated configuration. |
 | `python_typechecker` | `string` | `"ty"` | Modern Python typechecker preference for generated tooling. |
 | `python_makefile_stub` | `string` | Python 42 template | Override the generated Python Makefile body. |
