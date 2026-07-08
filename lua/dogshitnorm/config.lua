@@ -1,8 +1,5 @@
 local M = {}
 
-local PYTHON_MYPY_FLAGS = "--warn-return-any --warn-unused-ignores --ignore-missing-imports "
-	.. "--disallow-untyped-defs --check-untyped-defs"
-
 M.defaults = {
 	cmd = { "norminette" },
 	args = { "--no-colors" },
@@ -43,14 +40,23 @@ M.defaults = {
 	header_line_number_offset = false,
 	makefile_keybinding = "<leader>cm",
 	project_type = "auto",
-	python_scaffold = "full",
 	python_dirs = { "*python*", "*py*" },
 	c_dirs = {},
 	python_version = "3.10",
-	python_main = "main.py",
 	python_package = nil,
-	python_formatter = "ruff",
-	python_typechecker = "ty",
+	-- Python projects are initialized through an external setup CLI (see
+	-- :Pyprojectgen). `script` must point at the CLI entry point; flags are
+	-- collected through a vim.ui prompt flow with these values as defaults.
+	python_setup = {
+		script = nil,
+		python = "python3",
+		test_file = nil,
+		max_line_len = 100,
+		toolchain = "uv",
+		checks = { "mypy", "ruff", "pytest" },
+		debug = false,
+	},
+	norm_exclude_dirs = {},
 	src_dir = "src",
 	makefile_exclude_dirs = { ".git", ".jj", "tests", "test", "build", "libft", "libprintf" },
 	makefile_optional_libs = {
@@ -95,15 +101,19 @@ LDLIBS		=
 DEBUG		?= 0
 RM		= rm -f
 
+JOBS		?= $(shell nproc)
+MAKEFLAGS	+= -j $(JOBS) -l $(JOBS)
+
 ifeq ($(DEBUG),1)
 CFLAGS		+= -g3
 CPPFLAGS	+= -DDEBUG=1
 endif
 
 SRC_DIR		= src
+OBJ_DIR		= obj
 SRCS		= $(SRC_DIR)/main.c
 
-OBJS		= $(SRCS:.c=.o)
+OBJS		= $(SRCS:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
 DEPS		= $(OBJS:.o=.d)
 
 all: $(NAME)
@@ -111,11 +121,12 @@ all: $(NAME)
 $(NAME): $(OBJS)
 	$(CC) $(CFLAGS) $(LDFLAGS) $(OBJS) $(LDLIBS) -o $(NAME)
 
-%.o: %.c
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c Makefile
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c $< -o $@
 
 clean:
-	$(RM) $(OBJS) $(DEPS)
+	$(RM) -r $(OBJ_DIR)
 
 fclean: clean
 	$(RM) $(NAME)
@@ -129,79 +140,6 @@ re:
 .PHONY: all clean fclean re
 .DEFAULT_GOAL := all
 ]],
-	python_makefile_stub = table.concat({
-		"PYTHON ?= python3",
-		"UV ?= uv",
-		"PIP ?= $(PYTHON) -m pip",
-		"VENV ?= .venv",
-		"VENV_PYTHON = $(VENV)/bin/python",
-		"MAIN ?= main.py",
-		"",
-		"MYPY_FLAGS = " .. PYTHON_MYPY_FLAGS,
-		"",
-		".PHONY: install install-pip run debug clean lint lint-strict format check-modern",
-		"",
-		"install:",
-		"\t@if command -v $(UV) >/dev/null 2>&1; then \\",
-		"\t\t$(UV) sync --dev; \\",
-		"\telse \\",
-		"\t\t$(PYTHON) -m venv $(VENV); \\",
-		"\t\t$(VENV_PYTHON) -m pip install --upgrade pip; \\",
-		'\t\t$(VENV_PYTHON) -m pip install -e ".[dev]"; \\',
-		"\tfi",
-		"",
-		"install-pip:",
-		"\t$(PYTHON) -m venv $(VENV)",
-		"\t$(VENV_PYTHON) -m pip install --upgrade pip",
-		'\t$(VENV_PYTHON) -m pip install -e ".[dev]"',
-		"",
-		"run:",
-		"\t@if command -v $(UV) >/dev/null 2>&1; then \\",
-		"\t\t$(UV) run python $(MAIN); \\",
-		"\telse \\",
-		"\t\t$(VENV_PYTHON) $(MAIN); \\",
-		"\tfi",
-		"",
-		"debug:",
-		"\t@if command -v $(UV) >/dev/null 2>&1; then \\",
-		"\t\t$(UV) run python -m pdb $(MAIN); \\",
-		"\telse \\",
-		"\t\t$(VENV_PYTHON) -m pdb $(MAIN); \\",
-		"\tfi",
-		"",
-		"clean:",
-		'\tfind . -type d \\( -name "__pycache__" -o -name ".mypy_cache" -o -name ".ruff_cache" \\',
-		'\t\t-o -name ".pytest_cache" -o -name ".ty" \\) -prune -exec rm -rf {} +',
-		'\tfind . -type f \\( -name "*.pyc" -o -name "*.pyo" \\) -delete',
-		"",
-		"lint:",
-		"\t@if command -v $(UV) >/dev/null 2>&1; then \\",
-		"\t\t$(UV) run flake8 . && $(UV) run mypy . " .. PYTHON_MYPY_FLAGS .. "; \\",
-		"\telse \\",
-		"\t\t$(VENV_PYTHON) -m flake8 . && $(VENV_PYTHON) -m mypy . " .. PYTHON_MYPY_FLAGS .. "; \\",
-		"\tfi",
-		"",
-		"lint-strict:",
-		"\t@if command -v $(UV) >/dev/null 2>&1; then \\",
-		"\t\t$(UV) run flake8 . && $(UV) run mypy . --strict; \\",
-		"\telse \\",
-		"\t\t$(VENV_PYTHON) -m flake8 . && $(VENV_PYTHON) -m mypy . --strict; \\",
-		"\tfi",
-		"",
-		"format:",
-		"\t@if command -v $(UV) >/dev/null 2>&1; then \\",
-		"\t\t$(UV) run ruff format . && $(UV) run ruff check --fix .; \\",
-		"\telse \\",
-		"\t\t$(VENV_PYTHON) -m ruff format . && $(VENV_PYTHON) -m ruff check --fix .; \\",
-		"\tfi",
-		"",
-		"check-modern:",
-		"\t@if command -v $(UV) >/dev/null 2>&1; then \\",
-		"\t\t$(UV) run ruff check . && $(UV) run ty check .; \\",
-		"\telse \\",
-		"\t\t$(VENV_PYTHON) -m ruff check . && $(VENV_PYTHON) -m ty check .; \\",
-		"\tfi",
-	}, "\n"),
 }
 
 M.values = {}

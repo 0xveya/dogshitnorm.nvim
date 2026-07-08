@@ -117,30 +117,19 @@ function M.setup(opts)
 				end
 			end,
 		})
-
-		vim.api.nvim_create_autocmd("BufReadPost", {
-			pattern = { "Makefile", "makefile" },
-			group = oil_group,
-			callback = function(args)
-				vim.schedule(function()
-					makefile.background_sync(vim.api.nvim_buf_get_name(args.buf))
-				end)
-			end,
-		})
 	end
 
-	-- 2. Makefile Auto-Generation
+	-- 2. Makefile Auto-Generation (only ever fills empty Makefiles; an edited
+	-- Makefile is never regenerated or synced behind the user's back)
 	if cfg.auto_makefile then
 		vim.api.nvim_create_autocmd({ "BufWinEnter", "BufNewFile" }, {
 			pattern = { "Makefile", "makefile" },
 			group = vim.api.nvim_create_augroup("NorminetteMakeGen", { clear = true }),
 			callback = function(args)
 				vim.schedule(function()
-					vim.schedule(function()
-						if vim.api.nvim_buf_is_valid(args.buf) then
-							makefile.generate(args.buf)
-						end
-					end)
+					if vim.api.nvim_buf_is_valid(args.buf) then
+						makefile.autogen(args.buf)
+					end
 				end)
 			end,
 		})
@@ -230,12 +219,17 @@ function M.setup(opts)
 	-- 4. Header Guard Auto-Insertion
 	if cfg.auto_header_guard then
 		local guard_group = vim.api.nvim_create_augroup("NorminetteAutoGuard", { clear = true })
+		local function in_active_dir(bufnr)
+			return utils.is_in_active_dir(vim.api.nvim_buf_get_name(bufnr), cfg.active_dirs)
+		end
 		vim.api.nvim_create_autocmd({ "BufWinEnter", "BufNewFile" }, {
 			pattern = "*.h",
 			group = guard_group,
 			callback = function(args)
 				vim.schedule(function()
-					header.add_header_guard(args.buf)
+					if vim.api.nvim_buf_is_valid(args.buf) and in_active_dir(args.buf) then
+						header.add_header_guard(args.buf)
+					end
 				end)
 			end,
 		})
@@ -243,7 +237,9 @@ function M.setup(opts)
 			pattern = "*.h",
 			group = guard_group,
 			callback = function(args)
-				header.fix_header_guard(args.buf)
+				if in_active_dir(args.buf) then
+					header.fix_header_guard(args.buf)
+				end
 			end,
 		})
 	end

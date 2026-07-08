@@ -219,18 +219,22 @@ local function build_library_template(name, src_dir, src_block, debug_value)
 		"AR\t\t= ar",
 		"ARFLAGS\t\t= rcs",
 		"",
+		"JOBS\t\t?= $(shell nproc)",
+		"MAKEFLAGS\t+= -j $(JOBS) -l $(JOBS)",
+		"",
 		"ifeq ($(DEBUG),1)",
 		"CFLAGS\t\t+= -g3",
 		"CPPFLAGS\t+= -DDEBUG=1",
 		"endif",
 		"",
 		"SRC_DIR\t\t= " .. src_dir,
+		"OBJ_DIR\t\t= obj",
 	}
 
 	vim.list_extend(lines, src_block)
 	vim.list_extend(lines, {
 		"",
-		"OBJS\t\t= $(SRCS:.c=.o)",
+		"OBJS\t\t= $(SRCS:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)",
 		"DEPS\t\t= $(OBJS:.o=.d)",
 		"",
 		"all: $(NAME)",
@@ -239,11 +243,12 @@ local function build_library_template(name, src_dir, src_block, debug_value)
 		"\t$(RM) $(NAME)",
 		"\t$(AR) $(ARFLAGS) $(NAME) $(OBJS)",
 		"",
-		"%.o: %.c",
+		"$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c Makefile",
+		"\t@mkdir -p $(dir $@)",
 		"\t$(CC) $(CFLAGS) $(CPPFLAGS) -c $< -o $@",
 		"",
 		"clean:",
-		"\t$(RM) $(OBJS) $(DEPS)",
+		"\t$(RM) -r $(OBJ_DIR)",
 		"",
 		"fclean: clean",
 		"\t$(RM) $(NAME)",
@@ -738,66 +743,7 @@ local function write_missing_or_empty(path, lines)
 	return true
 end
 
-local function build_pyproject(cfg, package_name)
-	local python_version = cfg.python_version or "3.10"
-	return {
-		"[project]",
-		'name = "' .. package_name .. '"',
-		'version = "0.1.0"',
-		'description = ""',
-		'readme = "README.md"',
-		'requires-python = ">=' .. python_version .. '"',
-		"dependencies = []",
-		"",
-		"[project.optional-dependencies]",
-		'dev = ["flake8", "mypy", "ruff", "ty", "pytest"]',
-		"",
-		"[project.scripts]",
-		package_name .. ' = "' .. package_name .. '.cli:main"',
-		"",
-		"[build-system]",
-		'requires = ["setuptools>=80"]',
-		'build-backend = "setuptools.build_meta"',
-		"",
-		"[tool.setuptools.packages.find]",
-		'include = ["' .. package_name .. '*"]',
-		'exclude = ["tests*"]',
-		"",
-		"[tool.ruff]",
-		"line-length = 100",
-		'target-version = "py' .. python_version:gsub("%.", "") .. '"',
-		"",
-		"[tool.ruff.lint]",
-		'select = ["E", "F", "I", "UP", "B"]',
-		'ignore = ["UP046"]',
-		"",
-		"[tool.ruff.format]",
-		'quote-style = "double"',
-		'indent-style = "space"',
-		"docstring-code-format = true",
-		'line-ending = "lf"',
-		"",
-		"[tool.mypy]",
-		'python_version = "' .. python_version .. '"',
-		"warn_return_any = true",
-		"warn_unused_ignores = true",
-		"ignore_missing_imports = true",
-		"disallow_untyped_defs = true",
-		"check_untyped_defs = true",
-		"",
-		"[tool.pytest.ini_options]",
-		'testpaths = ["tests"]',
-	}
-end
-
-local function scaffold_python_project(root, cfg, mode)
-	mode = mode or cfg.python_scaffold or "full"
-	if mode == "makefile" then
-		return
-	end
-
-	local package_name = project.infer_package(root, cfg)
-	write_missing_or_empty(root .. "/pyproject.toml", build_pyproject(cfg, package_name))
+local function write_python_support_files(root, cfg)
 	write_missing_or_empty(root .. "/.python-version", { cfg.python_version or "3.10" })
 	write_missing_or_empty(root .. "/.gitignore", {
 		".venv/",
@@ -849,32 +795,164 @@ local function scaffold_python_project(root, cfg, mode)
 		"indent_size = 4",
 		"max_line_length = 100",
 	})
+end
 
-	if mode ~= "full" then
+local function python_setup_config(cfg)
+	local setup = cfg.python_setup
+	if type(setup) ~= "table" then
+		setup = {}
+	end
+	return vim.tbl_deep_extend("force", vim.deepcopy(config.defaults.python_setup), setup)
+end
+
+local function python_setup_script(setup)
+	if type(setup.script) ~= "string" or setup.script == "" then
+		return nil
+	end
+	local script = vim.fn.expand(setup.script)
+	if vim.fn.filereadable(script) == 0 then
+		return nil
+	end
+	return script
+end
+
+local function copy_python_test_suite(root, setup, package_name)
+	if type(setup.test_file) ~= "string" or setup.test_file == "" then
+		return
+	end
+	local src = vim.fn.expand(setup.test_file)
+	if vim.fn.filereadable(src) == 0 then
 		return
 	end
 
-	write_missing_or_empty(root .. "/" .. (cfg.python_main or "main.py"), {
-		"from " .. package_name .. ".cli import main",
-		"",
-		"",
-		'if __name__ == "__main__":',
-		"    main()",
-	})
-	write_missing_or_empty(root .. "/" .. package_name .. "/__init__.py", { '"""' .. package_name .. ' package."""' })
-	write_missing_or_empty(root .. "/" .. package_name .. "/cli.py", {
-		"def main() -> None:",
-		"    pass",
-	})
+	local dest = root .. "/tests/" .. vim.fn.fnamemodify(src, ":t")
+	if file_is_nonempty(dest) then
+		return
+	end
+
+	local lines = vim.fn.readfile(src)
+	for i, line in ipairs(lines) do
+		line = line:gsub("^(from%s+)[%w_]+(%.cli_fw%s)", "%1" .. package_name .. "%2")
+		line = line:gsub("^(from%s+)[%w_]+(%.errors%s)", "%1" .. package_name .. "%2")
+		lines[i] = line
+	end
 	vim.fn.mkdir(root .. "/tests", "p")
+	vim.fn.writefile(lines, dest)
 end
 
-local function build_python_makefile_body(cfg)
-	local body = vim.split(cfg.python_makefile_stub, "\n")
-	while #body > 0 and body[#body] == "" do
-		table.remove(body)
+local function reload_makefile_buffer(root)
+	local bufnr = vim.fn.bufnr(root .. "/Makefile")
+	if bufnr == -1 or not vim.api.nvim_buf_is_loaded(bufnr) or vim.bo[bufnr].modified then
+		return
 	end
-	return body
+	pcall(vim.api.nvim_buf_call, bufnr, function()
+		vim.cmd("silent! noautocmd edit!")
+	end)
+end
+
+local function run_python_setup(root, flags, cfg)
+	local setup = python_setup_config(cfg)
+	local script = python_setup_script(setup)
+	if not script then
+		vim.notify(
+			"python_setup.script is not configured or not readable; cannot initialize a Python project",
+			vim.log.levels.ERROR,
+			{ title = "dogshitnorm" }
+		)
+		return false
+	end
+
+	local python = setup.python or "python3"
+	if vim.fn.executable(python) == 0 then
+		vim.notify("Python executable not found: " .. python, vim.log.levels.ERROR, { title = "dogshitnorm" })
+		return false
+	end
+
+	local package_name = flags.package_name or project.infer_package(root, cfg)
+	local cmd = {
+		python,
+		script,
+		"--target_dir",
+		root,
+		"--package_name",
+		package_name,
+		"--max_line_len",
+		tostring(flags.max_line_len or setup.max_line_len),
+		"--toolchain",
+		flags.toolchain or setup.toolchain,
+	}
+	for _, check in ipairs(flags.checks or setup.checks) do
+		vim.list_extend(cmd, { "--checks", check })
+	end
+	local debug_flag = flags.debug
+	if debug_flag == nil then
+		debug_flag = setup.debug
+	end
+	if debug_flag then
+		table.insert(cmd, "--debug")
+	end
+
+	local cli_root = vim.fn.fnamemodify(script, ":h:h")
+	local ok, proc = pcall(function()
+		return vim.system(cmd, { cwd = cli_root, text = true, env = { PYTHONPATH = cli_root } }):wait()
+	end)
+	if not ok or proc.code ~= 0 then
+		local detail = ok and ((proc.stderr or "") .. (proc.stdout or "")) or tostring(proc)
+		vim.notify("Python setup CLI failed:\n" .. detail, vim.log.levels.ERROR, { title = "dogshitnorm" })
+		return false
+	end
+
+	copy_python_test_suite(root, setup, package_name)
+	write_python_support_files(root, cfg)
+	reload_makefile_buffer(root)
+	vim.notify("Python project initialized: " .. package_name, vim.log.levels.INFO, { title = "dogshitnorm" })
+	return true
+end
+
+local function split_checks(input)
+	local checks = {}
+	for check in tostring(input or ""):gmatch("[^,%s]+") do
+		table.insert(checks, check)
+	end
+	return checks
+end
+
+local function prompt_python_flags(root, cfg, on_done)
+	local setup = python_setup_config(cfg)
+	local flags = {}
+
+	vim.ui.input({ prompt = "Package name: ", default = project.infer_package(root, cfg) }, function(pkg)
+		if not pkg or pkg == "" then
+			return
+		end
+		flags.package_name = pkg
+		vim.ui.input({ prompt = "Max line length: ", default = tostring(setup.max_line_len) }, function(len)
+			if not len then
+				return
+			end
+			flags.max_line_len = tonumber(len) or setup.max_line_len
+			vim.ui.select({ "uv", "hybrid" }, { prompt = "Toolchain" }, function(toolchain)
+				if not toolchain then
+					return
+				end
+				flags.toolchain = toolchain
+				local default_checks = table.concat(setup.checks, ",")
+				vim.ui.input({ prompt = "Checks (comma separated): ", default = default_checks }, function(checks)
+					if not checks then
+						return
+					end
+					flags.checks = split_checks(checks)
+					vim.ui.select({ "no", "yes" }, { prompt = "Include debug target?" }, function(choice)
+						if not choice then
+							return
+						end
+						flags.debug = choice == "yes"
+						on_done(flags)
+					end)
+				end)
+			end)
+		end)
+	end)
 end
 
 local function build_default_makefile_body(project_root, cfg, existing_lines)
@@ -897,27 +975,19 @@ local function build_default_makefile_body(project_root, cfg, existing_lines)
 	return stub_lines
 end
 
-local function ensure_generated_makefile(bufnr, project_root, cfg, kind)
+local function ensure_generated_makefile(bufnr, project_root, cfg)
 	local existing_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
 	if has_non_header_body(existing_lines) then
 		return false
 	end
 
-	if kind ~= "python" then
-		local content = table.concat(existing_lines, "\n")
-		if not content:match("/%* %*+ %*/") and not content:match("^# %*+ #") then
-			if header42.ensure(bufnr) then
-				existing_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-			end
+	if not header42.has_header(bufnr) then
+		if header42.ensure(bufnr) then
+			existing_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
 		end
 	end
 
-	if kind == "python" then
-		write_body_with_header(bufnr, build_python_makefile_body(cfg))
-		scaffold_python_project(project_root, cfg)
-	else
-		write_body_with_header(bufnr, build_default_makefile_body(project_root, cfg, existing_lines))
-	end
+	write_body_with_header(bufnr, build_default_makefile_body(project_root, cfg, existing_lines))
 	return true
 end
 
@@ -1014,7 +1084,7 @@ local function ensure_debug_features(lines)
 				break
 			end
 			if line:match("^\t") and line:find("$(RM)", 1, true) then
-				if not line:find("$(DEPS)", 1, true) then
+				if not line:find("$(DEPS)", 1, true) and not line:find("$(OBJ_DIR)", 1, true) then
 					lines[i] = append_token(line, "$(DEPS)")
 				end
 				break
@@ -1152,13 +1222,17 @@ function M.background_sync(filepath)
 		return
 	end
 
-	local initial_kind = project.detect(project_root, cfg)
-	local changed = ensure_generated_makefile(bufnr, project_root, cfg, initial_kind)
-	local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-	local kind = makefile_kind(lines, project_root, cfg)
-	if kind == "python" then
+	-- Never rewrite a Makefile the user is in the middle of editing.
+	if vim.bo[bufnr].modified then
 		return
 	end
+
+	local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+	if makefile_kind(lines, project_root, cfg) == "python" then
+		return
+	end
+
+	local changed = ensure_generated_makefile(bufnr, project_root, cfg)
 	changed = sync_existing_makefile(bufnr, project_root, cfg) or changed
 
 	local success, file_count, source_changed = M.update_sources(bufnr)
@@ -1203,12 +1277,12 @@ function M.generate(target, override)
 			)
 			return false
 		end
-		ensure_generated_makefile(bufnr, project_root, cfg, "python")
-		return true
+		return M.generate_python_project(bufnr)
 	end
 
 	if find_target_index(existing_lines, "all") or find_assignment_index(existing_lines, "NAME") then
-		local changed = sync_existing_makefile(bufnr, project_root, cfg)
+		local changed = not header42.has_header(bufnr) and header42.ensure(bufnr) or false
+		changed = sync_existing_makefile(bufnr, project_root, cfg) or changed
 		if changed then
 			if save_makefile(bufnr) then
 				vim.notify("Makefile synced", vim.log.levels.INFO, { title = "dogshitnorm" })
@@ -1234,18 +1308,88 @@ function M.generate(target, override)
 	end)
 end
 
-function M.generate_python_project(target)
+-- Autocmd entry point: only fills brand-new/empty Makefiles. A Makefile that
+-- already has a body belongs to the user and is never rewritten here.
+function M.autogen(target)
+	local cfg = config.get()
+	local bufnr = resolve_generate_bufnr(target)
+	local filepath = vim.api.nvim_buf_get_name(bufnr)
+
+	if filepath == "" or filepath:match("oil://") or not filepath:match("[Mm]akefile$") then
+		return false
+	end
+	if not utils.is_in_active_dir(filepath, cfg.active_dirs) then
+		return false
+	end
+
+	local existing_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+	if has_non_header_body(existing_lines) then
+		return false
+	end
+
+	local project_root = vim.fn.fnamemodify(filepath, ":h")
+	local kind = makefile_kind(existing_lines, project_root, cfg)
+	if kind == "python" then
+		-- Python projects are initialized explicitly through :Pyprojectgen so
+		-- the CLI flags can be picked interactively; just hint once.
+		if not vim.b[bufnr].dogshitnorm_pygen_hint then
+			vim.b[bufnr].dogshitnorm_pygen_hint = true
+			vim.notify(
+				"Python project detected: run :Pyprojectgen to initialize it",
+				vim.log.levels.INFO,
+				{ title = "dogshitnorm" }
+			)
+		end
+		return false
+	end
+
+	if not ensure_generated_makefile(bufnr, project_root, cfg) then
+		return false
+	end
+
+	if vim.api.nvim_get_current_buf() == bufnr then
+		vim.schedule(function()
+			vim.fn.cursor(1, 1)
+			if vim.fn.search("NAME") > 0 then
+				vim.cmd("normal! $")
+			end
+		end)
+	end
+	return true
+end
+
+-- Initialize a Python project through the external setup CLI. Without a
+-- `flags` table the flags are collected interactively via vim.ui prompts.
+function M.generate_python_project(target, flags)
 	local cfg = config.get()
 	local bufnr = resolve_generate_bufnr(target)
 	local filepath = vim.api.nvim_buf_get_name(bufnr)
 	local root = filepath ~= "" and vim.fn.fnamemodify(filepath, ":h") or vim.fn.getcwd()
-	if filepath:match("[Mm]akefile$") then
+	if filepath:match("^oil://") then
+		root = filepath:gsub("^oil://", ""):gsub("/+$", "")
+	elseif filepath:match("[Mm]akefile$") then
 		root = vim.fn.fnamemodify(filepath, ":h")
 	elseif vim.fn.isdirectory(filepath) == 1 then
 		root = filepath
 	end
-	scaffold_python_project(root, cfg, cfg.python_scaffold)
-	vim.notify("Python project scaffold generated", vim.log.levels.INFO, { title = "dogshitnorm" })
+	root = utils.normalize_path(root)
+
+	if file_is_nonempty(root .. "/pyproject.toml") then
+		vim.notify(
+			"pyproject.toml already exists; refusing to reinitialize " .. root,
+			vim.log.levels.WARN,
+			{ title = "dogshitnorm" }
+		)
+		return false
+	end
+
+	if type(flags) == "table" then
+		return run_python_setup(root, flags, cfg)
+	end
+
+	prompt_python_flags(root, cfg, function(collected)
+		run_python_setup(root, collected, cfg)
+	end)
 	return true
 end
 

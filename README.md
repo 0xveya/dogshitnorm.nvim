@@ -14,7 +14,7 @@ Docs: <https://0xveya.github.io/dogshitnorm.nvim/>
 * **Header-Aware Viewing**: Optionally fold the on-disk 42 header out of the way, remap `gg` to the first real code line in that view, and display gutter line numbers relative to the first non-header line.
 * **Smart Header Guard Generator**: Automatically inserts C-style `#ifndef` guards in new `.h` files once the 42 header is present, ensures clean spacing, and keeps you in Normal mode.
 * **Makefile Boilerplate**: Instantly populates new `Makefile`s with 42-compliant mandatory rules (`all`, `clean`, `fclean`, `re`), dep-file support (`-MMD -MP`), and built-in debug toggles.
-* **42 Python Project UX**: `:Makegen` can auto-detect Python projects and generate a `uv`-first Makefile with pip/venv fallback, plus optional `pyproject.toml`, config files, `main.py`, package, and tests scaffold.
+* **42 Python Project UX**: `:Pyprojectgen` initializes Python projects through your external setup CLI, with an interactive `vim.ui` flag picker (package name, line length, toolchain, checks, debug) and automatic test-suite copying.
 * **Smart Source Sync**: Automatically detects your `SRC_DIR` from the Makefile and syncs your `SRCS` list with all `.c` files found in that directory (recursive). No more manual typing of every new file.
 * **Makefile Ergonomics**: Use `:Makelib [name]` to convert the current project Makefile into a static-library template, `:Makedebug [toggle|on|off]` to toggle debug mode, and `:Makestatus` to show whether you are in library mode and whether debug/deps are enabled.
 * **Include Sorting**: Sorts contiguous `#include` blocks alphabetically with `:Includesort`, or automatically before saving when enabled.
@@ -82,14 +82,18 @@ Using [lazy.nvim]():
         auto_makefile = true,
         makefile_keybinding = "<leader>cm",
         project_type = "auto",
-        python_scaffold = "full",
         python_dirs = { "*python*", "*py*" },
         c_dirs = {},
         python_version = "3.10",
-        python_main = "main.py",
         python_package = nil,
-        python_formatter = "ruff",
-        python_typechecker = "ty",
+        python_setup = {
+            script = "~/path/to/setup_project.py",
+            test_file = "~/path/to/test_cli_fw.py",
+            max_line_len = 100,
+            toolchain = "uv",
+            checks = { "mypy", "ruff", "pytest" },
+        },
+        norm_exclude_dirs = {},
         
         -- Makefile Sync settings
         auto_sync_makefile = true,
@@ -141,10 +145,9 @@ Using [lazy.nvim]():
 * **Line Counts**: Run `:NormLineCounts` or press `line_count_keybinding` to toggle virtual line count overlays above `.c` functions.
 * **Line Savers**: Run `:NormLineSavers` or use LSP code actions inside a `.c` function. Actions can remove extra blank lines inside the current function, combine an expression directly followed by a return with the comma operator, move simple `s++`/`s--` loop increments into a nearby `*s` expression, or fold a single-line `while (...)` body increment into `while ((...) && (s++, 1));`. The required declaration/code separator blank line is not offered as removable. More complex while-loop counter patterns are still listed as suggestions instead of being applied blindly.
 * **Quick Fixes**: Use Neovim's `vim.lsp.buf.code_action()` (`gra` by default on current Neovim) on a diagnostic line, run `:NormFix`, or run `:NormFixAll` to repair safe file-level issues such as header guards, include/define/prototype order, Makefile sources, whitespace, return parentheses, missing `void`, function spacing, overlong-function line savers, and snake_case naming.
-* **Auto-Makefile**: Creating a new `Makefile` will trigger the 42 Header and append a project stub. If configured optional libraries such as `libft` or `ft_printf`/`libprintf` exist in the project root, the generated Makefile also gets recursive build/clean rules and links those archives automatically. If none are found, the stub leaves a comment saying so.
-* **Python Makefiles**: `:Makegen` auto-detects Python from markers such as `pyproject.toml`, `.python-version`, `uv.lock`, top-level `.py` files, or folder globs like `*python*` and `*py*`. Use `:Makegen python` or `:Makegen c` to force a type. Python generation uses `uv sync --dev` first and falls back to `python -m venv` plus `pip install -e ".[dev]"`. `make lint` keeps the required 42 peer-evaluation path with exact `flake8 .` and `mypy` flags; `make format` and `make check-modern` expose `ruff` and `ty`.
-* **Python Isolation**: Python files and Python-project Makefiles do not get 42 headers and do not run norminette. C-only Makefile commands notify instead of rewriting Python Makefiles.
-* **Python Scaffold**: `python_scaffold = "makefile"` writes only the Python Makefile, `"config"` also creates config files, and `"full"` adds `main.py`, the inferred package, and `tests/`. `:Pyprojectgen` generates the Python scaffold files without changing C behavior.
+* **Auto-Makefile**: Creating a new (empty) `Makefile` will trigger the 42 Header and append a project stub. The stub builds in parallel by default (`JOBS ?= $(shell nproc)`), keeps objects and dep files in `obj/`, and makes objects depend on the Makefile so editing it triggers rebuilds. If configured optional libraries such as `libft` or `ft_printf`/`libprintf` exist in the project root, the generated Makefile also gets recursive build/clean rules and links those archives automatically. If none are found, the stub leaves a comment saying so. Once a Makefile has a body, opening it never re-templates or rewrites it.
+* **Python Init**: Python projects are initialized through an external setup CLI configured via `python_setup.script`. `:Pyprojectgen` (or `:Makegen python` on an empty Makefile) collects the flags (package name, line length, toolchain, checks, debug) through `vim.ui` prompts, runs the CLI, copies the configured test suite into `tests/` with rewritten imports, and writes `.gitignore`/`.editorconfig`/`.python-version` when missing. It refuses to run when a non-empty `pyproject.toml` exists.
+* **Python Isolation**: Python files and Python-project Makefiles do not get 42 headers and do not run norminette. C-only Makefile commands notify instead of rewriting Python Makefiles. `norm_exclude_dirs` suppresses norm diagnostics for whole directories.
 * **Source Sync**: Press `<leader>cu` (or run `:Makesync`) inside a Makefile. The plugin will read your `SRC_DIR` variable, crawl that folder for `.c` files, update your `SRCS` block with proper 42-style formatting and backslashes, and write the Makefile.
 * **Library Conversion**: Run `:Makelib` to rewrite the current Makefile as a static-library build. Pass an optional archive name such as `:Makelib libftprintf` or `:Makelib libftprintf.a`. If `NAME` already ends in `.a`, that archive name is preserved and `:Makestatus` reports library mode automatically.
 * **Debug Toggle**: Run `:Makedebug`, `:Makedebug on`, or `:Makedebug off` to flip the Makefile `DEBUG` flag. The plugin will ensure the dep-file and debug boilerplate exists and then notify the current state.
@@ -191,15 +194,12 @@ Using [lazy.nvim]():
 | `guard_keybinding` | `string` | `"<leader>ch"` | Keymap to trigger header guard. |
 | `makefile_keybinding` | `string` | `"<leader>cm"` | Keymap to trigger Makefile stub. |
 | `project_type` | `string` | `"auto"` | `"auto"`, `"c"`, or `"python"` project selection for `:Makegen`. |
-| `python_scaffold` | `string` | `"full"` | Python scaffold mode: `"makefile"`, `"config"`, or `"full"`. |
 | `python_dirs` | `table` | `{"*python*","*py*"}` | Case-insensitive folder globs that auto-detect Python projects. |
 | `c_dirs` | `table` | `{}` | Case-insensitive folder globs that force C during auto-detection. |
-| `python_version` | `string` | `"3.10"` | Version used for `.python-version`, `requires-python`, Ruff target, and mypy config. Override this per subject, e.g. `"3.12"`. |
-| `python_main` | `string` | `"main.py"` | Python Makefile `MAIN` entry and scaffold entrypoint. Set this to `app.py` or similar for custom layouts. |
+| `python_version` | `string` | `"3.10"` | Version written to `.python-version`. Override this per subject, e.g. `"3.12"`. |
 | `python_package` | `string` | `nil` | Package name; inferred from folder name when unset. Set this when folder and import package differ. |
-| `python_formatter` | `string` | `"ruff"` | Python formatter preference for generated configuration. |
-| `python_typechecker` | `string` | `"ty"` | Modern Python typechecker preference for generated tooling. |
-| `python_makefile_stub` | `string` | Python 42 template | Override the generated Python Makefile body. |
+| `python_setup` | `table` | `{ script = nil, ... }` | External Python setup CLI: `script` (required), `python`, `test_file`, and prompt defaults `max_line_len`, `toolchain`, `checks`, `debug`. |
+| `norm_exclude_dirs` | `table` | `{}` | Directories where norm diagnostics are suppressed entirely. |
 | `makesync_keybinding` | `string` | `"<leader>cu"` | Keymap to sync SRCS with SRC_DIR. |
 | `makefile_exclude_dirs` | `table` | `{".git",".jj","tests","test","build","libft","libprintf"}` | Directories ignored when syncing Makefile sources. Any path segment containing `tester` is also ignored. |
 | `makefile_optional_libs` | `table` | default `libft` / `ft_printf` / `libprintf` mapping | Optional libraries to auto-detect in generated Makefiles. Each entry can define `dirs`, `dir_var`, `lib_var`, `archive`, and per-directory `archives`. |

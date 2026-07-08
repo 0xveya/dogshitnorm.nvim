@@ -8,9 +8,11 @@ description: Generate and manage 42-style Makefiles with source syncing and libr
 The default C Makefile includes:
 
 - explicit `SRCS`
+- objects and dependency files in `OBJ_DIR = obj`, mirroring nested source folders (`mkdir -p $(dir $@)`), so build artifacts never clutter searches
+- objects depend on the Makefile itself, so editing the Makefile triggers a rebuild
+- parallel builds by default: `JOBS ?= $(shell nproc)` and `MAKEFLAGS += -j $(JOBS) -l $(JOBS)`
 - `CPPFLAGS = -MMD -MP`
-- `DEPS = $(OBJS:.o=.d)`
-- `-include $(DEPS)`
+- `DEPS = $(OBJS:.o=.d)` and `-include $(DEPS)`
 - `DEBUG ?= 0`
 - automatic `libft` and `ft_printf`/`libprintf` detection in the project root
 
@@ -39,26 +41,24 @@ require("dogshitnorm").setup({
 })
 ```
 
+## Your edits are respected
+
+Auto-generation only ever fills empty (or header-only) Makefiles. Once a Makefile has a body, opening it never re-templates or rewrites it, and background syncing skips a Makefile buffer with unsaved changes.
+
+Source syncing still updates the `SRCS` block when C files are created, renamed, or deleted on disk (triggered by saves and oil.nvim actions). The explicit `:Makegen` and `:Makesync` commands sync structure on demand, and `:Makegen` also inserts the 42 header into a C Makefile that is missing one.
+
 ## Python projects
 
-`:Makegen` auto-detects Python from `pyproject.toml`, `.python-version`, `uv.lock`, top-level `*.py`, or folder-name globs. Defaults include `*python*` and `*py*`. Use `:Makegen python` to force Python generation and `:Makegen c` to force the existing C template.
+Python Makefiles are not generated from a built-in template. Initialization is delegated to an external setup CLI configured through `python_setup` — see the [Python guide](/guides/python/). Opening an empty Makefile in a Python project shows a hint to run `:Pyprojectgen` instead of silently scaffolding.
 
-The Python Makefile uses `uv` first and falls back to `python -m venv` plus `pip install -e ".[dev]"`. `make lint` is the 42 exact path and runs `flake8 .` plus `mypy` with the required PDF flags. `make format` and `make check-modern` keep the modern `ruff` and `ty` workflow separate.
-
-`python_scaffold` controls how much gets created:
-
-- `"makefile"` creates only the Makefile
-- `"config"` creates the Makefile plus `pyproject.toml`, `.python-version`, `.gitignore`, and `.editorconfig`
-- `"full"` also creates `main.py`, the inferred package directory, `cli.py`, and `tests/`
-
-`:Pyprojectgen` writes the configured Python scaffold files without changing C generation behavior.
+`:Makegen` auto-detects Python from `pyproject.toml`, `.python-version`, `uv.lock`, top-level `*.py`, or folder-name globs (defaults `*python*` and `*py*`). `:Makegen python` on an empty Makefile starts the same interactive initialization as `:Pyprojectgen`; `:Makegen c` forces the C template.
 
 ## Commands
 
-- `:Makegen` inserts an auto-detected C or Python Makefile
-- `:Makegen python` forces the Python Makefile
+- `:Makegen` inserts an auto-detected C Makefile or starts Python initialization
+- `:Makegen python` forces Python initialization
 - `:Makegen c` forces the C Makefile
-- `:Pyprojectgen` creates Python scaffold files
+- `:Pyprojectgen` initializes a Python project through the setup CLI
 - `:Makesync` syncs `SRCS` with the files under `SRC_DIR` for C Makefiles
 - `:Makelib [name]` rewrites the Makefile into static-library mode
 - `:Makedebug [toggle|on|off]` flips debug mode
@@ -76,6 +76,8 @@ The Python Makefile uses `uv` first and falls back to `python -m venv` plus `pip
 
 That prevents nested `libft` and `libprintf` directories from being pulled into unrelated project Makefiles.
 
+`norm_exclude_dirs` (default `{}`) suppresses norm diagnostics entirely for the listed directories — useful for non-C projects living inside `active_dirs`.
+
 ## Library mode
 
-If the current target already ends in `.a`, dogshitnorm treats the Makefile as a library target. `:Makelib libftprintf` normalizes the name to `libftprintf.a`.
+If the current target already ends in `.a`, dogshitnorm treats the Makefile as a library target. `:Makelib libftprintf` normalizes the name to `libftprintf.a`. The library template uses the same `OBJ_DIR`, `JOBS`/`MAKEFLAGS`, and Makefile-dependency conventions as the binary template.

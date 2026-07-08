@@ -1,6 +1,6 @@
 ---
 title: Getting Started
-description: Install dogshitnorm.nvim for 42 C workflows and optional Python project scaffolding.
+description: Install dogshitnorm.nvim for 42 C workflows and optional Python project initialization.
 ---
 
 ## Install
@@ -44,15 +44,15 @@ vim.g.mail42 = "sfurst@student.42vienna.com"
 
 ## Python projects
 
-Open a `Makefile` in a Python project folder and run:
+Configure your external setup CLI once, then initialize projects with:
 
 ```vim
-:Makegen python
+:Pyprojectgen
 ```
 
-The default `python_scaffold = "full"` creates a Python Makefile, `pyproject.toml`, `.python-version`, `.gitignore`, `.editorconfig`, `main.py`, a package directory, and `tests/`. Auto-detection also picks Python for projects with `pyproject.toml`, `.python-version`, `uv.lock`, or top-level `.py` files.
+An interactive prompt flow collects the CLI flags (package name, line length, toolchain, checks, debug) and runs the CLI, which creates the Makefile, `pyproject.toml`, and package. Auto-detection picks Python for projects with `pyproject.toml`, `.python-version`, `uv.lock`, top-level `.py` files, or matching folder globs.
 
-See [Python Projects](./python/) for the generated targets and scaffold modes.
+See [Python Projects](./python/) for the CLI configuration and the full flow.
 
 ## Replace older setup
 

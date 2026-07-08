@@ -6,18 +6,24 @@ function M.strip_ansi(str)
 	return str:gsub("\27%[[0-9;]*m", "")
 end
 
-function M.is_in_active_dir(filepath, active_dirs)
-	if type(active_dirs) ~= "table" or #active_dirs == 0 then
-		return true
+function M.is_in_any_dir(filepath, dirs)
+	if type(dirs) ~= "table" then
+		return false
 	end
 	local expanded = vim.fn.expand(filepath)
-	for _, dir in ipairs(active_dirs) do
-		local expanded_dir = vim.fn.expand(dir)
-		if vim.startswith(expanded, expanded_dir) then
+	for _, dir in ipairs(dirs) do
+		if vim.startswith(expanded, vim.fn.expand(dir)) then
 			return true
 		end
 	end
 	return false
+end
+
+function M.is_in_active_dir(filepath, active_dirs)
+	if type(active_dirs) ~= "table" or #active_dirs == 0 then
+		return true
+	end
+	return M.is_in_any_dir(filepath, active_dirs)
 end
 
 function M.normalize_path(path)

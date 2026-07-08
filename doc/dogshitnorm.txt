@@ -15,13 +15,13 @@ CONTENTS                                                 *dogshitnorm-contents*
 1. Introduction                                         *dogshitnorm-intro*
 
 dogshitnorm.nvim is a Neovim plugin for 42-style C projects, with optional
-42 Python project generation. It combines:
+42 Python project initialization. It combines:
 
 - asynchronous `norminette` diagnostics
 - safe code actions and quick fixes
 - Makefile generation and source syncing
 - native 42 header insertion and update
-- Python Makefile and scaffold generation
+- Python project initialization through an external setup CLI
 - header guard, include, define, and prototype helpers
 - visual 42 header styling
 
@@ -34,8 +34,8 @@ https://0xveya.github.io/dogshitnorm.nvim/
 - Neovim 0.10+
 - `norminette` in `$PATH`
 - Tree-sitter C parser for the full custom diagnostics
-- Python tooling is optional; generated Python Makefiles prefer `uv` and fall
-  back to `python -m venv` plus pip
+- Python support is optional and requires an external setup CLI configured
+  through `python_setup.script` (see |dogshitnorm-makefiles|)
 
 ==============================================================================
 3. Installation                                    *dogshitnorm-installation*
@@ -135,15 +135,12 @@ Makefile options:
 - `src_dir`
 - `notify_on_sync`
 - `project_type`
-- `python_scaffold`
 - `python_dirs`
 - `c_dirs`
 - `python_version`
-- `python_main`
 - `python_package`
-- `python_formatter`
-- `python_typechecker`
-- `python_makefile_stub`
+- `python_setup`
+- `norm_exclude_dirs`
 
 See the web docs or README for the full option table and examples.
 
@@ -151,20 +148,26 @@ Python project defaults:
 
 >lua
 project_type = "auto"
-python_scaffold = "full"
 python_dirs = { "*python*", "*py*" }
 c_dirs = {}
 python_version = "3.10"
-python_main = "main.py"
 python_package = nil
-python_formatter = "ruff"
-python_typechecker = "ty"
+python_setup = {
+  script = nil,        -- path to the external setup CLI (required)
+  python = "python3",
+  test_file = nil,     -- optional test suite copied into tests/
+  max_line_len = 100,
+  toolchain = "uv",
+  checks = { "mypy", "ruff", "pytest" },
+  debug = false,
+}
+norm_exclude_dirs = {}
 <
 
 Change `python_version` when a subject requires a different Python version.
 Change `python_package` when the import package should differ from the folder
-name. Use `python_scaffold = "makefile"` for only the Makefile, `"config"`
-for config files, or `"full"` for config plus starter source and tests.
+name. `norm_exclude_dirs` lists directories where norm diagnostics are
+suppressed entirely (useful for non-C projects inside `active_dirs`).
 
 ==============================================================================
 6. Makefiles                                        *dogshitnorm-makefiles*
@@ -174,6 +177,11 @@ Generated Makefiles include:
 For C projects:
 
 - explicit `SRCS`
+- objects and dependency files kept out of the tree in `OBJ_DIR = obj`
+  (nested source folders are mirrored via `mkdir -p`)
+- objects depend on the Makefile, so editing it triggers a rebuild
+- parallel builds by default with `JOBS ?= $(shell nproc)` and
+  `MAKEFLAGS += -j $(JOBS) -l $(JOBS)`
 - dependency files with `CPPFLAGS = -MMD -MP`
 - `DEPS` and `-include $(DEPS)`
 - `DEBUG ?= 0`
@@ -182,19 +190,26 @@ For C projects:
 - `:Makedebug` to flip debug mode
 - `:Makestatus` to report binary/library and debug/deps state
 
-For Python projects:
+Auto-generation only ever fills empty (or header-only) Makefiles. A Makefile
+that has a body belongs to you: opening it never re-templates or rewrites it.
+Source syncing still updates the `SRCS` block when C files are created,
+renamed, or deleted on disk (saves and oil.nvim actions), and the explicit
+`:Makegen`/`:Makesync` commands still sync structure on demand.
 
-- `uv` first install/run/debug commands with pip/venv fallback
-- required 42 peer-evaluation `make lint` using exact `flake8 .` and `mypy`
-  flags
-- modern `ruff` and `ty` workflow through `format` and `check-modern`
-- optional scaffold controlled by `python_scaffold`
+For Python projects, initialization is delegated to an external setup CLI
+(`python_setup.script`). `:Pyprojectgen` collects the CLI flags (package name,
+line length, toolchain, checks, debug) through |vim.ui.input()| and
+|vim.ui.select()| prompts, runs the CLI, copies the configured
+`python_setup.test_file` into `tests/` with imports rewritten to the chosen
+package, and writes supporting files (`.gitignore`, `.editorconfig`,
+`.python-version`) when missing. Initialization refuses to run when a
+non-empty `pyproject.toml` already exists.
 
 `project_type = "auto"` detects Python from markers such as `pyproject.toml`,
 `.python-version`, `uv.lock`, top-level `*.py`, and folder globs like
-`*python*` and `*py*`. Use `:Makegen python` or
-`:Makegen c` to force one Makefile kind. `:Pyprojectgen` writes the configured
-Python scaffold without changing C projects.
+`*python*` and `*py*`. Use `:Makegen python` or `:Makegen c` to force one
+kind; `:Makegen python` on an empty Makefile starts the same interactive
+initialization as `:Pyprojectgen`.
 
 Python files and Python-project Makefiles do not get 42 headers and do not run
 norminette. C-only commands such as `:Makesync`, `:Makelib`, and `:Makedebug`

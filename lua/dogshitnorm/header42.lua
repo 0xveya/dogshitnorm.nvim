@@ -313,6 +313,14 @@ local function ensure_blank_after_header(bufnr)
 	end
 end
 
+function M.has_header(bufnr)
+	bufnr = normalize_bufnr(bufnr)
+	if not vim.api.nvim_buf_is_valid(bufnr) then
+		return false
+	end
+	return header_bounds(bufnr) ~= nil
+end
+
 function M.ensure(bufnr)
 	bufnr = normalize_bufnr(bufnr)
 	if not vim.api.nvim_buf_is_valid(bufnr) or not is_supported(bufnr) or not in_active_dir(bufnr) then
@@ -523,7 +531,12 @@ function M.ensure_new_buffer(bufnr)
 	end
 
 	local filepath = vim.api.nvim_buf_get_name(bufnr)
-	if filepath == "" or vim.fn.filereadable(filepath) == 1 or header_bounds(bufnr) ~= nil then
+	if filepath == "" or header_bounds(bufnr) ~= nil then
+		return false
+	end
+	-- Files created through oil (and friends) already exist on disk as empty
+	-- files, so only skip files that have real content.
+	if vim.fn.filereadable(filepath) == 1 and vim.fn.getfsize(filepath) > 0 then
 		return false
 	end
 

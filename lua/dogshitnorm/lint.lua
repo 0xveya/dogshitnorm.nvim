@@ -227,6 +227,10 @@ local function resolve_target(bufnr)
 	if not utils.is_in_active_dir(filename, cfg.active_dirs) then
 		return nil
 	end
+	if utils.is_in_any_dir(filename, cfg.norm_exclude_dirs) then
+		vim.diagnostic.set(utils.ns_id, bufnr, {})
+		return nil
+	end
 
 	if filename == "" then
 		return nil
