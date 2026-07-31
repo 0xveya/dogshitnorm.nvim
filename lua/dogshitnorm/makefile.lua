@@ -163,7 +163,7 @@ local function split_header(lines)
 	return header
 end
 
-local function collect_formatted_sources(project_root, src_dir, cfg)
+local function collect_formatted_sources(project_root, src_dir, cfg, excluded_sources)
 	local full_src_path = project_root .. "/" .. src_dir
 	if vim.fn.isdirectory(full_src_path) == 0 then
 		return {}
@@ -176,13 +176,74 @@ local function collect_formatted_sources(project_root, src_dir, cfg)
 		if not is_excluded_source(project_root, file, cfg.makefile_exclude_dirs) then
 			local rel_to_src = utils.relative_path(full_src_path, file)
 			if rel_to_src and rel_to_src ~= "" then
-				table.insert(formatted, "$(SRC_DIR)/" .. rel_to_src)
+				local formatted_source = "$(SRC_DIR)/" .. rel_to_src
+				if not (excluded_sources and excluded_sources[formatted_source]) then
+					table.insert(formatted, formatted_source)
+				end
 			end
 		end
 	end
 
 	table.sort(formatted)
 	return formatted
+end
+
+local function assignment_sources(lines, name)
+	local idx = find_assignment_index(lines, name)
+	local sources = {}
+	if not idx then
+		return sources
+	end
+
+	repeat
+		for source in lines[idx]:gmatch("%$%(SRC_DIR%)/[^%s\\]+%.c") do
+			sources[source] = true
+		end
+		local continues = lines[idx]:match("\\%s*$") ~= nil
+		idx = idx + 1
+	until not continues or idx > #lines
+	return sources
+end
+
+-- Preserve files that the author explicitly put only in a secondary target
+-- such as BONUS_SRCS. Without this, a save of checker.c moves it into SRCS and
+-- the mandatory binary ends up with two main functions.
+local function source_defines_main(project_root, src_dir, source)
+	local relative = source:match("^%$%(SRC_DIR%)/(.+)$")
+	if not relative then
+		return false
+	end
+	local path = project_root .. "/" .. src_dir .. "/" .. relative
+	if vim.fn.filereadable(path) == 0 then
+		return false
+	end
+	local content = table.concat(vim.fn.readfile(path), "\n")
+	return content:match("[%s%*]main%s*%(") ~= nil or content:match("^main%s*%(") ~= nil
+end
+
+local function secondary_only_sources(lines, project_root, src_dir)
+	local primary = assignment_sources(lines, "SRCS")
+	local excluded = {}
+	local primary_main_count = 0
+	for source in pairs(primary) do
+		if source_defines_main(project_root, src_dir, source) then
+			primary_main_count = primary_main_count + 1
+		end
+	end
+	for _, line in ipairs(lines) do
+		local name = line:match("^([%w_]+_SRCS)%s*[?+:]?=")
+		if name and name ~= "SRCS" then
+			for source in pairs(assignment_sources(lines, name)) do
+				if
+					not primary[source]
+					or (primary_main_count > 1 and source_defines_main(project_root, src_dir, source))
+				then
+					excluded[source] = true
+				end
+			end
+		end
+	end
+	return excluded
 end
 
 local function build_source_block(formatted)
@@ -971,6 +1032,12 @@ local function build_default_makefile_body(project_root, cfg, existing_lines)
 	end
 
 	local stub_lines = vim.split(cfg.makefile_stub, "\n")
+	local project_name = vim.fn.fnamemodify(project_root, ":t")
+	for i, line in ipairs(stub_lines) do
+		stub_lines[i] = line:gsub("your_project_name", function()
+			return project_name
+		end)
+	end
 	sync_optional_library_support(stub_lines, project_root, cfg)
 	return stub_lines
 end
@@ -993,10 +1060,27 @@ end
 
 local function sync_existing_makefile(bufnr, project_root, cfg)
 	local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+	local original_name_idx = find_assignment_index(lines, "NAME")
+	local original_name_line = original_name_idx and lines[original_name_idx] or nil
 	local changed = ensure_parallel_re_rule(lines)
 
 	if not is_library_mode(lines) and not is_library_project(project_root, cfg) then
 		changed = sync_optional_library_support(lines, project_root, cfg) or changed
+	end
+
+	-- NAME is user-owned after initial generation. Structural syncs may rebuild
+	-- surrounding sections, but they must never rename or remove the target.
+	if original_name_line then
+		local current_name_idx = find_assignment_index(lines, "NAME")
+		if current_name_idx then
+			if lines[current_name_idx] ~= original_name_line then
+				lines[current_name_idx] = original_name_line
+				changed = true
+			end
+		else
+			table.insert(lines, math.min(original_name_idx, #lines + 1), original_name_line)
+			changed = true
+		end
 	end
 
 	if changed then
@@ -1145,7 +1229,12 @@ function M.update_sources(target)
 	end
 	end_idx = end_idx or #lines
 
-	local formatted = collect_formatted_sources(ctx.project_root, src_dir, cfg)
+	local formatted = collect_formatted_sources(
+		ctx.project_root,
+		src_dir,
+		cfg,
+		secondary_only_sources(lines, ctx.project_root, src_dir)
+	)
 	local new_srcs = build_source_block(formatted)
 
 	-- Check if content actually changed
