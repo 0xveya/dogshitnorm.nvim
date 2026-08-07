@@ -270,6 +270,27 @@ assert((vim.fn.readfile(tmpdir .. "/src/main.c")[1] or ""):match("^/%* %*+ %*/$"
 assert(vim.tbl_contains(vim.fn.readfile(tmpdir .. "/ft_demo.h"), "int ft_demo(int x);"), "prototype was not inserted")
 assert((vim.fn.readfile(tmpdir .. "/Makefile")[1] or ""):match("^# %*+ #$"), "Makefile header was not inserted")
 
+-- Re-sending a function whose signature changed must update the existing
+-- header declaration in place, not append a stale duplicate.
+vim.cmd("edit " .. vim.fn.fnameescape(tmpdir .. "/src/main.c"))
+local resig_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+for i, line in ipairs(resig_lines) do
+	if line:match("^int\tft_demo%(int x%)$") then
+		resig_lines[i] = "int\tft_demo(int x, int y)"
+	end
+end
+vim.api.nvim_buf_set_lines(0, 0, -1, false, resig_lines)
+vim.cmd("write")
+vim.fn.search("^int\\s*ft_demo(", "w")
+require("dogshitnorm.header").add_prototype_to_header(0)
+
+local resigned_header = vim.fn.readfile(tmpdir .. "/ft_demo.h")
+local ft_demo_decls = vim.tbl_filter(function(line)
+	return line:match("ft_demo")
+end, resigned_header)
+assert(#ft_demo_decls == 1, "changing a function signature duplicated the header prototype")
+assert(ft_demo_decls[1] == "int ft_demo(int x, int y);", "existing header declaration was not updated in place")
+
 local plain_makefile = table.concat(vim.fn.readfile(nolib_tmpdir .. "/Makefile"), "\n")
 assert(not plain_makefile:find("your_project_name", 1, true), "binary template kept the project-name placeholder")
 assert(
