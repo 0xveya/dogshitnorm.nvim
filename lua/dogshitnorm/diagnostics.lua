@@ -208,6 +208,20 @@ local function check_lower_snake_name(bufnr, diagnostics, node, code, kind)
 	end
 end
 
+local function check_upper_snake_name(bufnr, diagnostics, node, code, kind)
+	local name = node_text(bufnr, node)
+
+	if not is_upper_snake(name) then
+		add_diagnostic(
+			diagnostics,
+			bufnr,
+			node,
+			code,
+			kind .. " names can only contain uppercase letters, digits and underscores."
+		)
+	end
+end
+
 local function check_prefixed_type_name(bufnr, diagnostics, node, prefix, code, message)
 	local name = node_text(bufnr, node)
 
@@ -355,7 +369,7 @@ local function check_type_naming_node(bufnr, diagnostics, node)
 			)
 		end
 	elseif node_type == "enumerator" and name then
-		check_lower_snake_name(bufnr, diagnostics, name, "IDENTIFIER_CASE", "Enum value")
+		check_upper_snake_name(bufnr, diagnostics, name, "IDENTIFIER_CASE", "Enum value")
 	end
 end
 

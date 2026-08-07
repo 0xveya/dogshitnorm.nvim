@@ -291,6 +291,30 @@ end, resigned_header)
 assert(#ft_demo_decls == 1, "changing a function signature duplicated the header prototype")
 assert(ft_demo_decls[1] == "int ft_demo(int x, int y);", "existing header declaration was not updated in place")
 
+-- Enum values must be flagged unless they are SCREAMING_SNAKE_CASE, per 42
+-- Norm (the enum/typedef tags use snake_case with e_/t_ prefixes, but the
+-- enumerators themselves must be uppercase).
+vim.fn.writefile({
+	"typedef enum e_color",
+	"{",
+	"\tred,",
+	"\tGREEN,",
+	"}\tt_color;",
+}, tmpdir .. "/src/enum_case.h")
+vim.cmd("edit " .. vim.fn.fnameescape(tmpdir .. "/src/enum_case.h"))
+require("dogshitnorm.lint").publish_manual(0)
+local enum_diagnostics = vim.diagnostic.get(0)
+local function has_identifier_case_diagnostic(diags, lnum)
+	for _, diagnostic in ipairs(diags) do
+		if diagnostic.code == "IDENTIFIER_CASE" and diagnostic.lnum == lnum then
+			return true
+		end
+	end
+	return false
+end
+assert(has_identifier_case_diagnostic(enum_diagnostics, 2), "lowercase enum value 'red' was not flagged")
+assert(not has_identifier_case_diagnostic(enum_diagnostics, 3), "uppercase enum value 'GREEN' was incorrectly flagged")
+
 local plain_makefile = table.concat(vim.fn.readfile(nolib_tmpdir .. "/Makefile"), "\n")
 assert(not plain_makefile:find("your_project_name", 1, true), "binary template kept the project-name placeholder")
 assert(
