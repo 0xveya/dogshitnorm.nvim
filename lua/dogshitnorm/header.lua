@@ -273,6 +273,15 @@ local function find_last_prototype_line(lines)
 	return last_idx
 end
 
+local function find_prototype_line_by_name(lines, name)
+	for i, line in ipairs(lines) do
+		if is_prototype(line) and get_prototype_name(line) == name then
+			return i
+		end
+	end
+	return nil
+end
+
 local function find_closing_endif(lines)
 	for i = #lines, 1, -1 do
 		if lines[i]:match("^%s*#%s*endif") then
@@ -320,11 +329,19 @@ local function insert_prototype(bufnr, prototype)
 		return false, "Prototype already exists in header"
 	end
 
+	local name = get_prototype_name(prototype)
+	local existing_idx = name and find_prototype_line_by_name(lines, name)
+	if existing_idx then
+		vim.api.nvim_buf_set_lines(bufnr, existing_idx - 1, existing_idx, false, { prototype })
+		M.sort_prototypes(bufnr)
+		return true, "updated"
+	end
+
 	local insert_idx = find_last_prototype_line(lines) or find_closing_endif(lines) or (#lines + 1)
 	local chunk = build_insert_chunk(lines, insert_idx, prototype)
 	vim.api.nvim_buf_set_lines(bufnr, insert_idx - 1, insert_idx - 1, false, chunk)
 	M.sort_prototypes(bufnr)
-	return true
+	return true, "added"
 end
 
 local function unwrap_identifier(node)
@@ -872,7 +889,8 @@ function M.add_prototype_to_header(bufnr, opts)
 		return false
 	end
 
-	vim.notify("Added prototype to " .. vim.fn.fnamemodify(header_path, ":."), vim.log.levels.INFO)
+	local verb = reason == "updated" and "Updated prototype in " or "Added prototype to "
+	vim.notify(verb .. vim.fn.fnamemodify(header_path, ":."), vim.log.levels.INFO)
 	return true
 end
 
