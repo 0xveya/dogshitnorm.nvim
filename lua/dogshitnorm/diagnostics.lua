@@ -343,7 +343,15 @@ local function check_type_naming_node(bufnr, diagnostics, node)
 	local node_type = node:type()
 	local name = node:field("name")[1]
 
-	if node_type == "struct_specifier" and name then
+	-- struct/union/enum_specifier nodes appear both where the type is
+	-- defined (e.g. "struct s_foo { ... }") and everywhere it's merely
+	-- referenced (a variable declaration, a parameter, a cast, ...). Only
+	-- the definition site - the one with a body - is what the norm's 's_'
+	-- prefix rule is actually about; checking every reference would also
+	-- flag types we don't control, like "struct termios".
+	local is_definition = node:field("body")[1] ~= nil
+
+	if node_type == "struct_specifier" and name and is_definition then
 		check_prefixed_type_name(
 			bufnr,
 			diagnostics,
@@ -352,9 +360,9 @@ local function check_type_naming_node(bufnr, diagnostics, node)
 			"STRUCT_NAME",
 			"A structure's name must start by 's_'."
 		)
-	elseif node_type == "enum_specifier" and name then
+	elseif node_type == "enum_specifier" and name and is_definition then
 		check_prefixed_type_name(bufnr, diagnostics, name, "e_", "ENUM_NAME", "An enum's name must start by 'e_'.")
-	elseif node_type == "union_specifier" and name then
+	elseif node_type == "union_specifier" and name and is_definition then
 		check_prefixed_type_name(bufnr, diagnostics, name, "u_", "UNION_NAME", "A union's name must start by 'u_'.")
 	elseif node_type == "type_definition" then
 		local typedef_name = unwrap_declarator(node:field("declarator")[1])

@@ -315,6 +315,39 @@ end
 assert(has_identifier_case_diagnostic(enum_diagnostics, 2), "lowercase enum value 'red' was not flagged")
 assert(not has_identifier_case_diagnostic(enum_diagnostics, 3), "uppercase enum value 'GREEN' was incorrectly flagged")
 
+-- A struct's name must start with 's_' at the point it is actually defined,
+-- but every other struct_specifier in the file is just a reference to that
+-- type (a variable declaration, a parameter, ...) - including struct types
+-- we don't control, like "struct termios". Those references must not be
+-- flagged.
+vim.fn.writefile({
+	"struct point",
+	"{",
+	"\tint x;",
+	"};",
+	"",
+	"void f(void)",
+	"{",
+	"\tstruct termios term;",
+	"}",
+}, tmpdir .. "/src/struct_case.c")
+vim.cmd("edit " .. vim.fn.fnameescape(tmpdir .. "/src/struct_case.c"))
+require("dogshitnorm.lint").publish_manual(0)
+local struct_diagnostics = vim.diagnostic.get(0)
+local function has_code_diagnostic(diags, code, lnum)
+	for _, diagnostic in ipairs(diags) do
+		if diagnostic.code == code and diagnostic.lnum == lnum then
+			return true
+		end
+	end
+	return false
+end
+assert(has_code_diagnostic(struct_diagnostics, "STRUCT_NAME", 0), "struct definition missing the 's_' prefix was not flagged")
+assert(
+	not has_code_diagnostic(struct_diagnostics, "STRUCT_NAME", 7),
+	"declaring a variable of a struct type incorrectly flagged the struct's name"
+)
+
 local plain_makefile = table.concat(vim.fn.readfile(nolib_tmpdir .. "/Makefile"), "\n")
 assert(not plain_makefile:find("your_project_name", 1, true), "binary template kept the project-name placeholder")
 assert(
