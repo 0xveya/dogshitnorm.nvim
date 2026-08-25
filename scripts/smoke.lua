@@ -177,6 +177,28 @@ vim.fn.search("^int\\s*ft_demo(", "w")
 require("dogshitnorm.header").add_prototype_to_header(0)
 vim.cmd("write")
 
+local original_user = vim.g.user42
+local original_mail = vim.g.mail42
+vim.g.user42 = "teammate"
+vim.g.mail42 = "teammate@student.42.test"
+vim.fn.writefile({ "int\tteammate_file(void);" }, tmpdir .. "/src/teammate.c")
+vim.cmd("edit " .. vim.fn.fnameescape(tmpdir .. "/src/teammate.c"))
+require("dogshitnorm.header42").ensure(0)
+local teammate_header = vim.api.nvim_buf_get_lines(0, 0, 11, false)
+teammate_header[9] = teammate_header[9]:gsub("%d%d%d%d/%d%d/%d%d %d%d:%d%d:%d%d", "2000/01/01 00:00:00")
+vim.api.nvim_buf_set_lines(0, 8, 9, false, { teammate_header[9] })
+vim.g.user42 = "current_editor"
+vim.g.mail42 = "current_editor@student.42.test"
+vim.api.nvim_buf_set_lines(0, -1, -1, false, { "" })
+require("dogshitnorm.header42").touch(0)
+require("dogshitnorm.header42").ensure(0)
+local updated_header = vim.api.nvim_buf_get_lines(0, 0, 11, false)
+assert(updated_header[6] == teammate_header[6], "header update replaced the original author")
+assert(updated_header[8] == teammate_header[8], "header update replaced the creator")
+assert(updated_header[9]:find("by current_editor", 1, true), "header update did not use the current editor")
+vim.g.user42 = original_user
+vim.g.mail42 = original_mail
+
 vim.cmd("edit " .. vim.fn.fnameescape(tmpdir .. "/Makefile"))
 vim.cmd("Makegen")
 require("dogshitnorm.makefile").sync(0)

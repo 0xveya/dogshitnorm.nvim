@@ -278,17 +278,6 @@ header_bounds = function(bufnr)
 	return 0, 11
 end
 
-local function existing_created_at(bufnr)
-	local bounds_start = header_bounds(bufnr)
-	if bounds_start == nil then
-		return nil
-	end
-
-	local lines = vim.api.nvim_buf_get_lines(bufnr, 0, 11, false)
-	local created_line = lines[8] or ""
-	return created_line:match("Created:%s+([0-9/]+ [0-9:]+)")
-end
-
 local function existing_updated_at(bufnr)
 	local bounds_start = header_bounds(bufnr)
 	if bounds_start == nil then
@@ -304,6 +293,33 @@ local function join_undo(bufnr)
 	pcall(vim.api.nvim_buf_call, bufnr, function()
 		vim.cmd("silent! undojoin")
 	end)
+end
+
+local function update_existing_header(bufnr, require_modified)
+	if require_modified and not vim.bo[bufnr].modified then
+		return false
+	end
+
+	local kind = resolve_kind(bufnr)
+	if not kind or header_bounds(bufnr) == nil then
+		return false
+	end
+
+	local updated_at = now_string()
+	if existing_updated_at(bufnr) == updated_at then
+		return false
+	end
+
+	local user = resolve_identity()
+	local updated_line = format_content_line(
+		kind,
+		"Updated: " .. updated_at .. " by " .. user,
+		RIGHT_TEXT.updated[kind]
+	)
+	join_undo(bufnr)
+	vim.api.nvim_buf_set_lines(bufnr, 8, 9, false, { updated_line })
+	M.sync_windows(bufnr)
+	return true
 end
 
 local function ensure_blank_after_header(bufnr)
@@ -327,19 +343,15 @@ function M.ensure(bufnr)
 		return false
 	end
 
-	local created_at = existing_created_at(bufnr) or now_string()
+	if header_bounds(bufnr) ~= nil then
+		return update_existing_header(bufnr, false)
+	end
+
+	local created_at = now_string()
 	local updated_at = now_string()
 	local lines = header_lines(bufnr, created_at, updated_at)
 	if not lines then
 		return false
-	end
-
-	local start_row, end_row = header_bounds(bufnr)
-	if start_row ~= nil then
-		vim.api.nvim_buf_set_lines(bufnr, start_row, end_row, false, lines)
-		ensure_blank_after_header(bufnr)
-		M.sync_windows(bufnr)
-		return true
 	end
 
 	local existing = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
@@ -360,25 +372,7 @@ function M.touch(bufnr)
 		return false
 	end
 
-	if not vim.bo[bufnr].modified then
-		return false
-	end
-
-	local created_at = existing_created_at(bufnr)
-	if not created_at then
-		return false
-	end
-
-	local updated_at = now_string()
-	if existing_updated_at(bufnr) == updated_at then
-		return false
-	end
-
-	local lines = header_lines(bufnr, created_at, updated_at)
-	join_undo(bufnr)
-	vim.api.nvim_buf_set_lines(bufnr, 0, 11, false, lines)
-	M.sync_windows(bufnr)
-	return true
+	return update_existing_header(bufnr, true)
 end
 
 local function save_window_state(winid)
